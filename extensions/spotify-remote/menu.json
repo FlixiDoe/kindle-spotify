@@ -1,0 +1,109 @@
+{
+  "items": [
+    {
+      "name": "Spotify Remote",
+      "priority": 0,
+      "items": [
+        {
+          "name": "Create Login URL",
+          "priority": 1,
+          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+          "params": "kual login",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Create Spotify Login URL"
+        },
+        {
+          "name": "Finish Login From callback.txt",
+          "priority": 2,
+          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+          "params": "kual finish-login",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Finish Spotify Login"
+        },
+        {
+          "name": "Status",
+          "priority": 3,
+          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+          "params": "kual status",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Spotify Status"
+        },
+        {
+          "name": "Play / Pause",
+          "priority": 4,
+          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+          "params": "kual playpause",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Spotify Play Pause"
+        },
+        {
+          "name": "Next",
+          "priority": 5,
+          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+          "params": "kual next",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Spotify Next"
+        },
+        {
+          "name": "Previous",
+          "priority": 6,
+          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+          "params": "kual prev",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Spotify Previous"
+        },
+        {
+          "name": "Volume +",
+          "priority": 7,
+          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+          "params": "kual volup",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Spotify Volume Up"
+        },
+        {
+          "name": "Volume -",
+          "priority": 8,
+          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+          "params": "kual voldown",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Spotify Volume Down"
+        },
+        {
+          "name": "Shuffle",
+          "priority": 9,
+          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+          "params": "kual shuffle",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Spotify Shuffle"
+        },
+        {
+          "name": "Repeat",
+          "priority": 10,
+          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+          "params": "kual repeat",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Spotify Repeat"
+        },
+        {
+          "name": "Recover Kindle UI",
+          "priority": 11,
+          "action": "sh /mnt/us/extensions/spotify-remote/recover.sh",
+          "params": "",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Recover Kindle UI"
+        }
+      ]
+    }
+  ]
+}

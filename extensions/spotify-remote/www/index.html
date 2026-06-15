@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Spotify Remote</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Spotify Remote</h1>
+      <button id="loginBtn">Login</button>
+    </header>
+
+    <section id="setup" class="panel hidden">
+      <h2>Setup</h2>
+      <label>Spotify Client ID</label>
+      <input id="clientId" type="text" autocomplete="off">
+      <button id="saveConfigBtn">Save Client ID</button>
+      <p id="setupMsg"></p>
+    </section>
+
+    <section id="error" class="error hidden"></section>
+
+    <section id="manual" class="panel hidden">
+      <h2>Manual Login Fallback</h2>
+      <p>If the Kindle browser does not return to localhost, paste the full redirect URL or only the code here.</p>
+      <textarea id="manualCode" rows="4"></textarea>
+      <button id="manualBtn">Finish Login</button>
+    </section>
+
+    <section id="player" class="player">
+      <div id="coverBox"><img id="cover" alt=""></div>
+      <div class="meta">
+        <div id="title" class="title">Not connected</div>
+        <div id="artist" class="artist">Open Spotify on a phone or computer first.</div>
+        <div id="album" class="album"></div>
+        <div class="progress"><div id="bar"></div></div>
+        <div id="time" class="time">0:00 / 0:00</div>
+      </div>
+    </section>
+
+    <section class="controls">
+      <button id="prevBtn">Prev</button>
+      <button id="playBtn">Play/Pause</button>
+      <button id="nextBtn">Next</button>
+      <button id="volDownBtn">Vol -</button>
+      <button id="volUpBtn">Vol +</button>
+      <button id="shuffleBtn">Shuffle</button>
+      <button id="repeatBtn">Repeat</button>
+      <button id="devicesBtn">Devices</button>
+      <button id="refreshBtn">Refresh</button>
+    </section>
+
+    <section id="devices" class="panel hidden">
+      <h2>Devices</h2>
+      <div id="deviceList"></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
