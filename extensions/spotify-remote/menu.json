@@ -14,8 +14,17 @@
           "internal": "status Spotify Now Playing"
         },
         {
-          "name": "Create Login URL",
+          "name": "Stop Now Playing Screen",
           "priority": 1,
+          "action": "sh /mnt/us/extensions/spotify-remote/nowplaying-stop.sh",
+          "params": "",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Stop Spotify Now Playing"
+        },
+        {
+          "name": "Create Login URL",
+          "priority": 2,
           "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
           "params": "kual login",
           "exitmenu": false,
@@ -24,7 +33,7 @@
         },
         {
           "name": "Finish Login From callback.txt",
-          "priority": 2,
+          "priority": 3,
           "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
           "params": "kual finish-login",
           "exitmenu": false,
@@ -33,7 +42,7 @@
         },
         {
           "name": "Status",
-          "priority": 3,
+          "priority": 4,
           "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
           "params": "kual status",
           "exitmenu": false,
@@ -42,7 +51,7 @@
         },
         {
           "name": "Play / Pause",
-          "priority": 4,
+          "priority": 5,
           "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
           "params": "kual playpause",
           "exitmenu": false,
@@ -51,7 +60,7 @@
         },
         {
           "name": "Next",
-          "priority": 5,
+          "priority": 6,
           "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
           "params": "kual next",
           "exitmenu": false,
@@ -60,7 +69,7 @@
         },
         {
           "name": "Previous",
-          "priority": 6,
+          "priority": 7,
           "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
           "params": "kual prev",
           "exitmenu": false,
@@ -69,7 +78,7 @@
         },
         {
           "name": "Volume +",
-          "priority": 7,
+          "priority": 8,
           "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
           "params": "kual volup",
           "exitmenu": false,
@@ -78,7 +87,7 @@
         },
         {
           "name": "Volume -",
-          "priority": 8,
+          "priority": 9,
           "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
           "params": "kual voldown",
           "exitmenu": false,
@@ -87,7 +96,7 @@
         },
         {
           "name": "Shuffle",
-          "priority": 9,
+          "priority": 10,
           "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
           "params": "kual shuffle",
           "exitmenu": false,
@@ -96,7 +105,7 @@
         },
         {
           "name": "Repeat",
-          "priority": 10,
+          "priority": 11,
           "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
           "params": "kual repeat",
           "exitmenu": false,
@@ -105,7 +114,7 @@
         },
         {
           "name": "Recover Kindle UI",
-          "priority": 11,
+          "priority": 12,
           "action": "sh /mnt/us/extensions/spotify-remote/recover.sh",
           "params": "",
           "exitmenu": false,

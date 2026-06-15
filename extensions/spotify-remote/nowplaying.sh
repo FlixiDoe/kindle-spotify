@@ -3,6 +3,8 @@ APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN="$APP_DIR/bin/spotify-remote-arm"
 LOG_FILE="$APP_DIR/logs/spotify-remote.log"
 DATA_FILE="$APP_DIR/data/nowplaying.json"
+PID_FILE="$APP_DIR/data/nowplaying.pid"
+STOP_FILE="$APP_DIR/data/nowplaying.stop"
 
 mkdir -p "$APP_DIR/logs" "$APP_DIR/data"
 
@@ -26,6 +28,26 @@ draw() {
   fi
 }
 
+draw_text() {
+  SIZE="$1"
+  ROW="$2"
+  TEXT="$3"
+  [ -n "$TEXT" ] || TEXT=" "
+  if [ "$FBINK" != "true" ]; then
+    "$FBINK" -q -S "$SIZE" -m -y "$ROW" "$TEXT" >> "$LOG_FILE" 2>&1 || true
+  fi
+}
+
+clip() {
+  TEXT="$1"
+  MAX="$2"
+  if [ "${#TEXT}" -gt "$MAX" ]; then
+    printf "%s..." "$(printf "%s" "$TEXT" | cut -c 1-"$((MAX - 3))")"
+  else
+    printf "%s" "$TEXT"
+  fi
+}
+
 json_value() {
   KEY="$1"
   sed -n "s/.*\"$KEY\"[ ]*:[ ]*\"\\([^\"]*\\)\".*/\\1/p" "$DATA_FILE" | head -n 1
@@ -41,68 +63,74 @@ json_num() {
   sed -n "s/.*\"$KEY\"[ ]*:[ ]*\\([0-9][0-9]*\\).*/\\1/p" "$DATA_FILE" | head -n 1
 }
 
-log "Rendering Now Playing screen"
-"$BIN" kual nowplaying >> "$LOG_FILE" 2>&1
-
-TITLE="$(json_value title)"
-ARTIST="$(json_value artist)"
-ALBUM="$(json_value album)"
-PROGRESS="$(json_value progress)"
-DURATION="$(json_value duration)"
-PLAYING="$(json_bool is_playing)"
-VOLUME="$(json_num volume)"
-SHUFFLE="$(json_bool shuffle)"
-REPEAT="$(json_value repeat)"
-ERROR="$(json_value error)"
-
-[ -n "$TITLE" ] || TITLE="Spotify Remote"
-[ -n "$ARTIST" ] || ARTIST="No track loaded"
-[ -n "$ALBUM" ] || ALBUM="Run Login/Status if needed"
-[ -n "$PROGRESS" ] || PROGRESS="0:00"
-[ -n "$DURATION" ] || DURATION="0:00"
-[ -n "$VOLUME" ] || VOLUME="?"
-[ -n "$REPEAT" ] || REPEAT="off"
-
-if [ "$PLAYING" = "true" ]; then
-  PLAY_ICON="PAUSE"
-  STATE="NOW PLAYING"
-else
-  PLAY_ICON="PLAY"
-  STATE="PAUSED"
-fi
-
-if [ -n "$ERROR" ]; then
-  STATE="SPOTIFY REMOTE"
-  TITLE="Needs attention"
-  ARTIST="$ERROR"
-  ALBUM="Use KUAL controls, then refresh this screen"
-fi
+echo "$$" > "$PID_FILE"
+log "Now Playing loop running as PID $$"
 
 # Let KUAL finish closing/redrawing before we paint our app screen.
-sleep 2
-draw -k
-sleep 1
+sleep 4
 
-# A quiet centered layout inspired by a small dedicated music player.
-# FBInk handles horizontal centering with -pmh; y values are text rows.
-draw -q -pmh -y 2  "SPOTIFY REMOTE"
-draw -q -pmh -y 5  "+============================+"
-draw -q -pmh -y 6  "|                            |"
-draw -q -pmh -y 7  "|        ALBUM  COVER        |"
-draw -q -pmh -y 8  "|                            |"
-draw -q -pmh -y 9  "|    refresh for now playing |"
-draw -q -pmh -y 10 "|                            |"
-draw -q -pmh -y 11 "+============================+"
+while [ ! -f "$STOP_FILE" ]; do
+  "$BIN" kual nowplaying >> "$LOG_FILE" 2>&1
 
-draw -q -pmh -y 14 "$STATE"
-draw -q -pmh -y 16 "$TITLE"
-draw -q -pmh -y 18 "$ARTIST"
-draw -q -pmh -y 20 "$ALBUM"
+  TITLE="$(clip "$(json_value title)" 30)"
+  ARTIST="$(clip "$(json_value artist)" 34)"
+  ALBUM="$(clip "$(json_value album)" 34)"
+  PROGRESS="$(json_value progress)"
+  DURATION="$(json_value duration)"
+  PLAYING="$(json_bool is_playing)"
+  VOLUME="$(json_num volume)"
+  SHUFFLE="$(json_bool shuffle)"
+  REPEAT="$(json_value repeat)"
+  ERROR="$(clip "$(json_value error)" 36)"
 
-draw -q -pmh -y 23 "=============================="
-draw -q -pmh -y 24 "$PROGRESS                         $DURATION"
-draw -q -pmh -y 27 "|<          $PLAY_ICON          >|"
-draw -q -pmh -y 30 "VOL $VOLUME   SHUFFLE $SHUFFLE   REPEAT $REPEAT"
-draw -q -pmh -y -3 "KUAL controls: Play/Pause, Next, Previous"
+  [ -n "$TITLE" ] || TITLE="Spotify Remote"
+  [ -n "$ARTIST" ] || ARTIST="No track loaded"
+  [ -n "$ALBUM" ] || ALBUM="Run Login/Status if needed"
+  [ -n "$PROGRESS" ] || PROGRESS="0:00"
+  [ -n "$DURATION" ] || DURATION="0:00"
+  [ -n "$VOLUME" ] || VOLUME="?"
+  [ -n "$REPEAT" ] || REPEAT="off"
 
+  if [ "$PLAYING" = "true" ]; then
+    PLAY_ICON="PAUSE"
+    STATE="NOW PLAYING"
+  else
+    PLAY_ICON="PLAY"
+    STATE="PAUSED"
+  fi
+
+  if [ -n "$ERROR" ]; then
+    STATE="SPOTIFY REMOTE"
+    TITLE="Needs attention"
+    ARTIST="$ERROR"
+    ALBUM="Use KUAL controls, then refresh"
+  fi
+
+  draw -k
+  sleep 1
+
+  draw_text 2 2  "SPOTIFY REMOTE"
+  draw_text 2 6  "+==============================+"
+  draw_text 2 7  "|                              |"
+  draw_text 2 8  "|          ALBUM COVER         |"
+  draw_text 2 9  "|                              |"
+  draw_text 2 10 "|                              |"
+  draw_text 2 11 "+==============================+"
+
+  draw_text 2 15 "$STATE"
+  draw_text 3 18 "$TITLE"
+  draw_text 2 22 "$ARTIST"
+  draw_text 2 25 "$ALBUM"
+
+  draw_text 2 30 "=============================="
+  draw_text 2 32 "$PROGRESS                    $DURATION"
+  draw_text 3 36 "|<       $PLAY_ICON       >|"
+  draw_text 2 41 "VOL $VOLUME   SHUF $SHUFFLE   REP $REPEAT"
+  draw_text 1 -3 "Refreshes every 8s. Stop via KUAL."
+
+  sleep 8
+done
+
+log "Now Playing loop stopped"
+rm -f "$PID_FILE" "$STOP_FILE"
 exit 0
