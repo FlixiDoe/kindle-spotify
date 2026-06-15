@@ -13,10 +13,19 @@ log() {
 if [ -f "$PID_FILE" ]; then
   OLD_PID="$(cat "$PID_FILE" 2>/dev/null)"
   if [ -n "$OLD_PID" ] && kill -0 "$OLD_PID" 2>/dev/null; then
-    log "Now Playing loop already running as PID $OLD_PID"
-    exit 0
+    log "Killing old Now Playing PID $OLD_PID"
+    kill "$OLD_PID" 2>/dev/null || true
   fi
 fi
+
+ps 2>/dev/null | grep '[s]h .*/nowplaying.sh' | while read PID REST; do
+  log "Killing old shell Now Playing loop PID $PID"
+  kill "$PID" 2>/dev/null || true
+done
+ps 2>/dev/null | grep '[s]potify-remote-arm ui' | while read PID REST; do
+  log "Killing old native UI PID $PID"
+  kill "$PID" 2>/dev/null || true
+done
 
 log "Starting native Now Playing UI"
 nohup "$BIN" ui >> "$LOG_FILE" 2>&1 &

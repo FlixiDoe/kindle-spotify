@@ -215,22 +215,22 @@ func (a *app) drawFBInkNowPlaying() {
 
 	a.fbinkClear()
 	time.Sleep(250 * time.Millisecond)
-	a.fbinkText(2, 2, "SPOTIFY REMOTE")
-	a.fbinkText(2, 6, "+==============================+")
-	a.fbinkText(2, 7, "|                              |")
-	a.fbinkText(2, 8, "|         ALBUM  COVER         |")
-	a.fbinkText(2, 9, "|                              |")
-	a.fbinkText(2, 10, "|                              |")
-	a.fbinkText(2, 11, "+==============================+")
-	a.fbinkText(2, 15, state)
-	a.fbinkText(3, 18, safe(title, 24))
-	a.fbinkText(2, 22, safe(artist, 32))
-	a.fbinkText(2, 25, safe(albumName, 32))
-	a.fbinkText(2, 30, "==============================")
-	a.fbinkText(2, 32, progress+"                    "+duration)
-	a.fbinkText(3, 36, "|<       "+playIcon+"       >|")
-	a.fbinkText(2, 41, "VOL "+volume+"   SHUF "+shuffle+"   REP "+repeat)
-	a.fbinkText(1, -3, "Tap: left prev, center play, right next, bottom quit")
+	a.fbinkText(4, 1, "SPOTIFY REMOTE")
+	a.fbinkText(4, 4, "+====================+")
+	a.fbinkText(4, 5, "|                    |")
+	a.fbinkText(4, 6, "|    ALBUM COVER     |")
+	a.fbinkText(4, 7, "|                    |")
+	a.fbinkText(4, 8, "+====================+")
+	a.fbinkText(4, 11, state)
+	a.fbinkText(6, 13, safe(title, 18))
+	a.fbinkText(4, 18, safe(artist, 24))
+	a.fbinkText(4, 21, safe(albumName, 24))
+	a.fbinkText(4, 25, "====================")
+	a.fbinkText(4, 27, progress+"          "+duration)
+	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
+	a.fbinkText(3, 39, "VOL "+volume+"  SHUF "+shuffle+"  REP "+repeat)
+	a.fbinkText(2, -2, "Bottom tap quits. Refresh 8s.")
+	log.Printf("FBInk UI drawn: %s / %s", title, artist)
 }
 
 func (a *app) fbinkPath() string {
@@ -311,9 +311,9 @@ func (a *app) readGrabbedTouch(f *os.File, out chan<- string, done <-chan struct
 				nx, ny := normalizeTouch(x, y)
 				log.Printf("UI tap raw=(%d,%d) normalized=(%d,%d)", x, y, nx, ny)
 				action := "playpause"
-				if ny > 1350 {
+				if ny > 1250 {
 					action = "quit"
-				} else if ny > 950 {
+				} else if ny > 850 {
 					if nx < 360 {
 						action = "prev"
 					} else if nx > 720 {
@@ -321,7 +321,7 @@ func (a *app) readGrabbedTouch(f *os.File, out chan<- string, done <-chan struct
 					} else {
 						action = "playpause"
 					}
-				} else if ny > 780 {
+				} else if ny > 650 {
 					if nx < 536 {
 						action = "voldown"
 					} else {

@@ -19,4 +19,8 @@ ps 2>/dev/null | grep '[s]potify-remote-arm ui' | while read PID REST; do
   kill "$PID" 2>/dev/null || true
 done
 
+ps 2>/dev/null | grep '[s]h .*/nowplaying.sh' | while read PID REST; do
+  kill "$PID" 2>/dev/null || true
+done
+
 exit 0
