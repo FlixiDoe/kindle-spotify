@@ -5,6 +5,15 @@
       "priority": 0,
       "items": [
         {
+          "name": "Now Playing Screen",
+          "priority": 0,
+          "action": "sh /mnt/us/extensions/spotify-remote/nowplaying.sh",
+          "params": "",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Spotify Now Playing"
+        },
+        {
           "name": "Create Login URL",
           "priority": 1,
           "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",

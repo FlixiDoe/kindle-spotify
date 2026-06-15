@@ -154,6 +154,8 @@ func (a *app) runKUAL(action string) {
 		a.kualToggleShuffle()
 	case "repeat":
 		a.kualToggleRepeat()
+	case "nowplaying":
+		a.kualNowPlayingData()
 	case "recover":
 		eipsClear()
 		eips(2, 0, "Spotify Remote")
@@ -164,13 +166,46 @@ func (a *app) runKUAL(action string) {
 	}
 }
 
+func (a *app) kualNowPlayingData() {
+	var p playback
+	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
+	out := map[string]any{
+		"ok": false,
+	}
+	if err != nil {
+		out["error"] = "Failed to get playback state: " + err.Error()
+	} else if code == http.StatusNoContent {
+		out["error"] = "No active Spotify device"
+	} else {
+		out["ok"] = true
+		out["title"] = p.CurrentTrack.Name
+		out["artist"] = artistNames(p.CurrentTrack.Artists)
+		out["album"] = p.CurrentTrack.Album.Name
+		out["is_playing"] = p.IsPlaying
+		out["progress"] = fmtMS(p.ProgressMS)
+		out["duration"] = fmtMS(p.CurrentTrack.DurationMS)
+		out["volume"] = p.Device.VolumePercent
+		out["shuffle"] = p.Shuffle
+		out["repeat"] = p.Repeat
+	}
+	_ = writeJSON(filepath.Join(a.base, "data", "nowplaying.json"), out)
+	if ok, _ := out["ok"].(bool); ok {
+		a.kualPrint("Now Playing data updated", fmt.Sprint(out["title"]), fmt.Sprint(out["artist"]))
+	} else {
+		a.kualPrint("Now Playing failed", fmt.Sprint(out["error"]))
+	}
+}
+
 func (a *app) kualPrint(lines ...string) {
-	eipsClear()
-	eips(1, 0, "SPOTIFY REMOTE")
+	var out []string
+	out = append(out, "SPOTIFY REMOTE")
 	for i, line := range lines {
-		eips(3+i, 0, safe(line, 48))
+		_ = i
+		out = append(out, line)
 		log.Printf("KUAL: %s", line)
 	}
+	statusPath := filepath.Join(a.base, "data", "status.txt")
+	_ = os.WriteFile(statusPath, []byte(strings.Join(out, "\n")+"\n"), 0644)
 }
 
 func (a *app) kualStatus() {
