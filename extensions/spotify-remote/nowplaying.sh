@@ -78,26 +78,28 @@ if [ -n "$ERROR" ]; then
   ALBUM="Use KUAL controls, then refresh this screen"
 fi
 
-draw --cls
+# Let KUAL finish closing/redrawing before we paint our app screen.
+sleep 2
+draw -k
 sleep 1
 
 # A quiet centered layout inspired by a small dedicated music player.
 # FBInk handles horizontal centering with -pmh; y values are text rows.
 draw -q -pmh -y 2  "SPOTIFY REMOTE"
-draw -q -pmh -y 5  "+----------------------------+"
+draw -q -pmh -y 5  "+============================+"
 draw -q -pmh -y 6  "|                            |"
 draw -q -pmh -y 7  "|        ALBUM  COVER        |"
 draw -q -pmh -y 8  "|                            |"
 draw -q -pmh -y 9  "|    refresh for now playing |"
 draw -q -pmh -y 10 "|                            |"
-draw -q -pmh -y 11 "+----------------------------+"
+draw -q -pmh -y 11 "+============================+"
 
 draw -q -pmh -y 14 "$STATE"
 draw -q -pmh -y 16 "$TITLE"
 draw -q -pmh -y 18 "$ARTIST"
 draw -q -pmh -y 20 "$ALBUM"
 
-draw -q -pmh -y 23 "------------------------------"
+draw -q -pmh -y 23 "=============================="
 draw -q -pmh -y 24 "$PROGRESS                         $DURATION"
 draw -q -pmh -y 27 "|<          $PLAY_ICON          >|"
 draw -q -pmh -y 30 "VOL $VOLUME   SHUFFLE $SHUFFLE   REPEAT $REPEAT"

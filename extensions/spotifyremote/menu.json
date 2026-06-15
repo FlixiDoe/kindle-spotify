@@ -7,9 +7,9 @@
         {
           "name": "Now Playing Screen",
           "priority": 0,
-          "action": "sh /mnt/us/extensions/spotify-remote/nowplaying.sh",
+          "action": "sh /mnt/us/extensions/spotify-remote/nowplaying-launch.sh",
           "params": "",
-          "exitmenu": false,
+          "exitmenu": true,
           "status": false,
           "internal": "status Spotify Now Playing"
         },
