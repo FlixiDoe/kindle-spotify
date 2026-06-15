@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -121,12 +122,219 @@ func main() {
 		a.runKUAL(action)
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "ui" {
+		a.runFBInkUI()
+		return
+	}
 	go a.callbackServer()
 	go a.touchLoop()
 	a.draw()
 	go a.refreshLoop()
 	<-a.quit
 	eipsClear()
+}
+
+func (a *app) runFBInkUI() {
+	log.Printf("Starting FBInk UI")
+	a.status = "Starting UI"
+	tapCh := make(chan string, 8)
+	done := make(chan struct{})
+	go a.grabTouchLoop(tapCh, done)
+	defer close(done)
+
+	nextDraw := time.Now()
+	for {
+		select {
+		case action := <-tapCh:
+			log.Printf("UI action: %s", action)
+			if action == "quit" {
+				a.fbinkClear()
+				return
+			}
+			a.uiControl(action)
+			nextDraw = time.Now()
+		default:
+		}
+		if time.Now().After(nextDraw) {
+			a.drawFBInkNowPlaying()
+			nextDraw = time.Now().Add(8 * time.Second)
+		}
+		time.Sleep(120 * time.Millisecond)
+	}
+}
+
+func (a *app) uiControl(action string) {
+	switch action {
+	case "playpause":
+		a.kualPlayPause()
+	case "next":
+		a.kualControl(http.MethodPost, "https://api.spotify.com/v1/me/player/next", nil, "Next")
+	case "prev":
+		a.kualControl(http.MethodPost, "https://api.spotify.com/v1/me/player/previous", nil, "Previous")
+	case "volup":
+		a.kualVolume(10)
+	case "voldown":
+		a.kualVolume(-10)
+	}
+}
+
+func (a *app) drawFBInkNowPlaying() {
+	var p playback
+	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
+	title := "Spotify Remote"
+	artist := "No active Spotify device"
+	albumName := "Start Spotify on phone or PC"
+	state := "NEEDS ATTENTION"
+	progress := "0:00"
+	duration := "0:00"
+	volume := "?"
+	shuffle := "?"
+	repeat := "off"
+	playIcon := "PLAY"
+	if err != nil {
+		artist = "Failed to get playback state"
+		albumName = err.Error()
+	} else if code == http.StatusNoContent {
+		artist = "No active Spotify device"
+	} else {
+		title = p.CurrentTrack.Name
+		artist = artistNames(p.CurrentTrack.Artists)
+		albumName = p.CurrentTrack.Album.Name
+		progress = fmtMS(p.ProgressMS)
+		duration = fmtMS(p.CurrentTrack.DurationMS)
+		volume = strconv.Itoa(p.Device.VolumePercent)
+		shuffle = strconv.FormatBool(p.Shuffle)
+		repeat = p.Repeat
+		if p.IsPlaying {
+			state = "NOW PLAYING"
+			playIcon = "PAUSE"
+		} else {
+			state = "PAUSED"
+		}
+	}
+
+	a.fbinkClear()
+	time.Sleep(250 * time.Millisecond)
+	a.fbinkText(2, 2, "SPOTIFY REMOTE")
+	a.fbinkText(2, 6, "+==============================+")
+	a.fbinkText(2, 7, "|                              |")
+	a.fbinkText(2, 8, "|         ALBUM  COVER         |")
+	a.fbinkText(2, 9, "|                              |")
+	a.fbinkText(2, 10, "|                              |")
+	a.fbinkText(2, 11, "+==============================+")
+	a.fbinkText(2, 15, state)
+	a.fbinkText(3, 18, safe(title, 24))
+	a.fbinkText(2, 22, safe(artist, 32))
+	a.fbinkText(2, 25, safe(albumName, 32))
+	a.fbinkText(2, 30, "==============================")
+	a.fbinkText(2, 32, progress+"                    "+duration)
+	a.fbinkText(3, 36, "|<       "+playIcon+"       >|")
+	a.fbinkText(2, 41, "VOL "+volume+"   SHUF "+shuffle+"   REP "+repeat)
+	a.fbinkText(1, -3, "Tap: left prev, center play, right next, bottom quit")
+}
+
+func (a *app) fbinkPath() string {
+	for _, p := range []string{"/mnt/us/libkh/bin/fbink", "/mnt/us/koreader/fbink", "/mnt/us/extensions/MRInstaller/bin/KHF/fbink"} {
+		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+			return p
+		}
+	}
+	return ""
+}
+
+func (a *app) fbinkClear() {
+	if p := a.fbinkPath(); p != "" {
+		_ = exec.Command(p, "-k").Run()
+	}
+}
+
+func (a *app) fbinkText(size, row int, text string) {
+	if p := a.fbinkPath(); p != "" {
+		_ = exec.Command(p, "-q", "-S", strconv.Itoa(size), "-m", "-y", strconv.Itoa(row), text).Run()
+	}
+}
+
+func (a *app) grabTouchLoop(out chan<- string, done <-chan struct{}) {
+	for _, path := range []string{"/dev/input/event1", "/dev/input/event2", "/dev/input/event3", "/dev/input/event0"} {
+		if f, err := os.Open(path); err == nil {
+			log.Printf("Trying touch grab on %s", path)
+			if err := ioctlGrab(f, true); err != nil {
+				log.Printf("Touch grab failed on %s: %v", path, err)
+				_ = f.Close()
+				continue
+			}
+			log.Printf("Touch grabbed on %s", path)
+			a.readGrabbedTouch(f, out, done)
+			return
+		}
+	}
+	log.Printf("No touch device grabbed")
+}
+
+func ioctlGrab(f *os.File, grab bool) error {
+	val := uintptr(0)
+	if grab {
+		val = 1
+	}
+	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(0x40044590), val)
+	if errno != 0 {
+		return errno
+	}
+	return nil
+}
+
+func (a *app) readGrabbedTouch(f *os.File, out chan<- string, done <-chan struct{}) {
+	defer f.Close()
+	defer ioctlGrab(f, false)
+	var x, y int
+	for {
+		select {
+		case <-done:
+			return
+		default:
+		}
+		var ev inputEvent
+		if err := binary.Read(f, binary.LittleEndian, &ev); err != nil {
+			log.Printf("Touch read failed: %v", err)
+			return
+		}
+		switch ev.Type {
+		case 3:
+			if ev.Code == 0 || ev.Code == 0x35 {
+				x = int(ev.Value)
+			}
+			if ev.Code == 1 || ev.Code == 0x36 {
+				y = int(ev.Value)
+			}
+		case 1:
+			if ev.Code == 0x14a && ev.Value == 0 {
+				nx, ny := normalizeTouch(x, y)
+				log.Printf("UI tap raw=(%d,%d) normalized=(%d,%d)", x, y, nx, ny)
+				action := "playpause"
+				if ny > 1350 {
+					action = "quit"
+				} else if ny > 950 {
+					if nx < 360 {
+						action = "prev"
+					} else if nx > 720 {
+						action = "next"
+					} else {
+						action = "playpause"
+					}
+				} else if ny > 780 {
+					if nx < 536 {
+						action = "voldown"
+					} else {
+						action = "volup"
+					}
+				}
+				select {
+				case out <- action:
+				default:
+				}
+			}
+		}
+	}
 }
 
 func (a *app) runKUAL(action string) {

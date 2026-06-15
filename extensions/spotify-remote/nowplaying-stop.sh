@@ -15,4 +15,8 @@ if [ -f "$PID_FILE" ]; then
   rm -f "$PID_FILE"
 fi
 
+ps 2>/dev/null | grep '[s]potify-remote-arm ui' | while read PID REST; do
+  kill "$PID" 2>/dev/null || true
+done
+
 exit 0

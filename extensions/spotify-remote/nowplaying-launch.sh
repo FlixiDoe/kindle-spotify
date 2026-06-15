@@ -2,6 +2,7 @@
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 LOG_FILE="$APP_DIR/logs/spotify-remote.log"
 PID_FILE="$APP_DIR/data/nowplaying.pid"
+BIN="$APP_DIR/bin/spotify-remote-arm"
 
 mkdir -p "$APP_DIR/logs" "$APP_DIR/data"
 
@@ -17,8 +18,7 @@ if [ -f "$PID_FILE" ]; then
   fi
 fi
 
-rm -f "$APP_DIR/data/nowplaying.stop"
-log "Starting Now Playing loop"
-nohup sh "$APP_DIR/nowplaying.sh" >> "$LOG_FILE" 2>&1 &
+log "Starting native Now Playing UI"
+nohup "$BIN" ui >> "$LOG_FILE" 2>&1 &
 echo "$!" > "$PID_FILE"
 exit 0
