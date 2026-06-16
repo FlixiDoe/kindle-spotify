@@ -278,15 +278,15 @@ func (a *app) drawFBInkNowPlaying() {
 		a.fbinkText(4, 7, "|                    |")
 		a.fbinkText(4, 8, "+====================+")
 	}
-	a.fbinkText(4, 25, "====================")
 	a.fbinkText(2, -4, "Refresh 8s. Quit only in lower-right.")
-	a.fbinkText(4, 13, safe(artist, 24))
-	a.fbinkText(6, 18, safe(title, 18))
-	a.fbinkText(4, 23, safe(albumName, 24))
-	a.fbinkText(4, 27, progress+"          "+duration)
-	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
-	a.fbinkText(4, 35, "VOL-  "+volume+"%  VOL+")
-	a.fbinkText(3, 39, "SHUF "+shuffle+"  REP "+repeat)
+	a.fbinkText(4, 12, safe(artist, 24))
+	a.fbinkText(6, 17, safe(title, 18))
+	a.fbinkText(4, 22, safe(albumName, 24))
+	a.fbinkText(4, 28, "====================")
+	a.fbinkText(4, 30, progress+"          "+duration)
+	a.fbinkText(3, 33, "SHUF "+shuffle+"  REP "+repeat)
+	a.fbinkText(4, 37, "VOL-  "+volume+"%  VOL+")
+	a.fbinkText(5, 41, "|<   "+playIcon+"   >|")
 	log.Printf("FBInk UI drawn: %s / %s", title, artist)
 }
 
