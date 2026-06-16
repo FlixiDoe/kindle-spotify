@@ -78,6 +78,7 @@ type album struct {
 }
 
 type track struct {
+	ID         string   `json:"id"`
 	Name       string   `json:"name"`
 	Artists    []artist `json:"artists"`
 	Album      album    `json:"album"`
@@ -132,6 +133,7 @@ type app struct {
 	lastDraw   time.Time
 	lastAction time.Time
 	lastTap    string
+	lastFBInkLayoutKey string
 	quit       chan struct{}
 }
 
@@ -240,11 +242,14 @@ func (a *app) drawFBInkNowPlaying() {
 	repeat := "off"
 	playIcon := "PLAY"
 	coverPath := ""
+	layoutKey := "attention"
 	if err != nil {
 		artist = "Failed to get playback state"
 		albumName = err.Error()
+		layoutKey = "error|" + albumName
 	} else if code == http.StatusNoContent {
 		artist = "No active Spotify device"
+		layoutKey = "no-device"
 	} else {
 		title = p.CurrentTrack.Name
 		artist = artistNames(p.CurrentTrack.Artists)
@@ -254,7 +259,7 @@ func (a *app) drawFBInkNowPlaying() {
 		volume = strconv.Itoa(p.Device.VolumePercent)
 		shuffle = strconv.FormatBool(p.Shuffle)
 		repeat = p.Repeat
-		coverPath = a.prepareCover(p.CurrentTrack.Album.Images)
+		layoutKey = p.CurrentTrack.ID + "|" + title + "|" + artist + "|" + albumName + "|" + duration
 		if p.IsPlaying {
 			state = "NOW PLAYING"
 			playIcon = "PAUSE"
@@ -263,28 +268,35 @@ func (a *app) drawFBInkNowPlaying() {
 		}
 	}
 
-	a.fbinkClear()
-	time.Sleep(250 * time.Millisecond)
-	a.fbinkText(4, 1, "SPOTIFY REMOTE")
-	if coverPath != "" {
-		a.fbinkImage(coverPath)
-	} else {
-		a.fbinkText(4, 4, "+====================+")
-		a.fbinkText(4, 5, "|                    |")
-		a.fbinkText(4, 6, "|    ALBUM COVER     |")
-		a.fbinkText(4, 7, "|                    |")
-		a.fbinkText(4, 8, "+====================+")
+	fullRedraw := layoutKey != a.lastFBInkLayoutKey
+	if fullRedraw {
+		a.lastFBInkLayoutKey = layoutKey
+		a.fbinkClear()
+		time.Sleep(250 * time.Millisecond)
+		a.fbinkText(4, 1, "SPOTIFY REMOTE")
+		if code != http.StatusNoContent && err == nil {
+			coverPath = a.prepareCover(p.CurrentTrack.Album.Images)
+		}
+		if coverPath != "" {
+			a.fbinkImage(coverPath)
+		} else {
+			a.fbinkText(4, 4, "+====================+")
+			a.fbinkText(4, 5, "|                    |")
+			a.fbinkText(4, 6, "|    ALBUM COVER     |")
+			a.fbinkText(4, 7, "|                    |")
+			a.fbinkText(4, 8, "+====================+")
+		}
+		a.fbinkText(4, 25, "====================")
+		a.fbinkText(2, -4, "Refresh 8s. Quit only in lower-right.")
 	}
 	a.fbinkText(4, 11, state)
 	a.fbinkText(6, 13, safe(title, 18))
 	a.fbinkText(4, 18, safe(artist, 24))
 	a.fbinkText(4, 21, safe(albumName, 24))
-	a.fbinkText(4, 25, "====================")
 	a.fbinkText(4, 27, progress+"          "+duration)
 	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
 	a.fbinkText(3, 39, "VOL "+volume+"  SHUF "+shuffle+"  REP "+repeat)
-	a.fbinkText(2, -4, "Refresh 8s. Quit only in lower-right.")
-	log.Printf("FBInk UI drawn: %s / %s", title, artist)
+	log.Printf("FBInk UI drawn: %s / %s full=%v", title, artist, fullRedraw)
 }
 
 func (a *app) fbinkPath() string {
