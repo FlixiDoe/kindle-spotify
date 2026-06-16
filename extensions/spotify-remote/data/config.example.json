@@ -13,6 +13,7 @@
   "touch_swap_xy": false,
   "touch_invert_x": false,
   "touch_invert_y": false,
+  "touch_use_kernel_abs": true,
   "eips_col_width": 22,
   "eips_row_height": 40,
   "button_top": 660,

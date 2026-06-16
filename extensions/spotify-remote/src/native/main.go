@@ -25,24 +25,25 @@ import (
 const scopes = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
 
 type config struct {
-	ClientID      string `json:"client_id"`
-	Redirect      string `json:"redirect_uri"`
-	Port          int    `json:"port"`
-	RefreshSec    int    `json:"refresh_seconds"`
-	ScreenWidth   int    `json:"screen_width"`
-	ScreenHeight  int    `json:"screen_height"`
-	TouchMinX     int    `json:"touch_min_x"`
-	TouchMaxX     int    `json:"touch_max_x"`
-	TouchMinY     int    `json:"touch_min_y"`
-	TouchMaxY     int    `json:"touch_max_y"`
-	TouchSwapXY   bool   `json:"touch_swap_xy"`
-	TouchInvertX  bool   `json:"touch_invert_x"`
-	TouchInvertY  bool   `json:"touch_invert_y"`
-	EipsColWidth  int    `json:"eips_col_width"`
-	EipsRowHeight int    `json:"eips_row_height"`
-	ButtonTop     int    `json:"button_top"`
-	ButtonHeight  int    `json:"button_height"`
-	ButtonGap     int    `json:"button_gap"`
+	ClientID          string `json:"client_id"`
+	Redirect          string `json:"redirect_uri"`
+	Port              int    `json:"port"`
+	RefreshSec        int    `json:"refresh_seconds"`
+	ScreenWidth       int    `json:"screen_width"`
+	ScreenHeight      int    `json:"screen_height"`
+	TouchMinX         int    `json:"touch_min_x"`
+	TouchMaxX         int    `json:"touch_max_x"`
+	TouchMinY         int    `json:"touch_min_y"`
+	TouchMaxY         int    `json:"touch_max_y"`
+	TouchSwapXY       bool   `json:"touch_swap_xy"`
+	TouchInvertX      bool   `json:"touch_invert_x"`
+	TouchInvertY      bool   `json:"touch_invert_y"`
+	TouchUseKernelAbs *bool  `json:"touch_use_kernel_abs"`
+	EipsColWidth      int    `json:"eips_col_width"`
+	EipsRowHeight     int    `json:"eips_row_height"`
+	ButtonTop         int    `json:"button_top"`
+	ButtonHeight      int    `json:"button_height"`
+	ButtonGap         int    `json:"button_gap"`
 }
 
 type tokenFile struct {
@@ -503,20 +504,21 @@ func (a *app) loadConfig() error {
 
 func defaultConfig() config {
 	return config{
-		Redirect:      "http://127.0.0.1:8787/callback",
-		Port:          8787,
-		RefreshSec:    8,
-		ScreenWidth:   1236,
-		ScreenHeight:  1648,
-		TouchMinX:     0,
-		TouchMaxX:     4095,
-		TouchMinY:     0,
-		TouchMaxY:     4095,
-		EipsColWidth:  22,
-		EipsRowHeight: 40,
-		ButtonTop:     660,
-		ButtonHeight:  88,
-		ButtonGap:     2,
+		Redirect:          "http://127.0.0.1:8787/callback",
+		Port:              8787,
+		RefreshSec:        8,
+		ScreenWidth:       1236,
+		ScreenHeight:      1648,
+		TouchMinX:         0,
+		TouchMaxX:         4095,
+		TouchMinY:         0,
+		TouchMaxY:         4095,
+		TouchUseKernelAbs: boolPtr(true),
+		EipsColWidth:      22,
+		EipsRowHeight:     40,
+		ButtonTop:         660,
+		ButtonHeight:      88,
+		ButtonGap:         2,
 	}
 }
 
@@ -559,6 +561,10 @@ func (a *app) normalizeConfig() {
 	if a.cfg.ButtonGap == 0 {
 		a.cfg.ButtonGap = 2
 	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 func readJSON(path string, out any) error {
@@ -1000,6 +1006,14 @@ type inputEvent struct {
 	Value int32
 }
 
+type touchCalibration struct {
+	MinX   int
+	MaxX   int
+	MinY   int
+	MaxY   int
+	Source string
+}
+
 func (a *app) touchLoop() {
 	opened := make(map[string]bool)
 	for {
@@ -1023,9 +1037,13 @@ func (a *app) readInput(path string) {
 		return
 	}
 	defer f.Close()
+	cal := a.touchCalibration(f, path)
 	var x, y int
 	var hasCoords bool
 	var touching bool
+	var sawTouchKey bool
+	var sawTrackingID bool
+	var pendingRelease bool
 	for {
 		var ev inputEvent
 		if err := binary.Read(f, binary.LittleEndian, &ev); err != nil {
@@ -1040,37 +1058,74 @@ func (a *app) readInput(path string) {
 			case 0x01, 0x36: // ABS_Y, ABS_MT_POSITION_Y
 				y = int(ev.Value)
 				hasCoords = true
+			case 0x39: // ABS_MT_TRACKING_ID
+				sawTrackingID = true
+				if ev.Value >= 0 {
+					touching = true
+					pendingRelease = false
+				} else {
+					touching = false
+					pendingRelease = true
+				}
 			}
 		case 1: // EV_KEY
 			switch ev.Code {
-			case 0x14a: // BTN_TOUCH
+			case 0x14a, 0x145: // BTN_TOUCH, BTN_TOOL_FINGER
+				sawTouchKey = true
 				if ev.Value == 1 {
 					touching = true
-				} else if ev.Value == 0 && hasCoords {
-					// Touch release — fire tap
-					a.tap(x, y)
-					hasCoords = false
+					pendingRelease = false
+				} else if ev.Value == 0 {
 					touching = false
+					pendingRelease = true
 				}
 			}
 		case 0: // EV_SYN (SYN_REPORT)
-			// Some PW5 firmware versions don't send BTN_TOUCH.
-			// Use SYN_REPORT with coordinates as fallback for single-tap.
-			if !touching && hasCoords && ev.Code == 0 {
-				a.tap(x, y)
+			if ev.Code != 0 {
+				continue
+			}
+			if pendingRelease && hasCoords {
+				a.tap(x, y, cal)
+				hasCoords = false
+				pendingRelease = false
+				continue
+			}
+			// Last-resort fallback for unusual devices that emit only ABS+SYN.
+			if !touching && !sawTouchKey && !sawTrackingID && hasCoords {
+				a.tap(x, y, cal)
 				hasCoords = false
 			}
 		}
 	}
 }
 
-func (a *app) tap(rawX, rawY int) {
+func (a *app) touchCalibration(f *os.File, path string) touchCalibration {
+	cal := touchCalibration{
+		MinX:   a.cfg.TouchMinX,
+		MaxX:   a.cfg.TouchMaxX,
+		MinY:   a.cfg.TouchMinY,
+		MaxY:   a.cfg.TouchMaxY,
+		Source: "config",
+	}
+	if a.cfg.TouchUseKernelAbs != nil && !*a.cfg.TouchUseKernelAbs {
+		log.Printf("touch calibration for %s: config x=%d..%d y=%d..%d", path, cal.MinX, cal.MaxX, cal.MinY, cal.MaxY)
+		return cal
+	}
+	if kernelCal, ok := queryInputAbsCalibration(f); ok {
+		log.Printf("touch calibration for %s: %s x=%d..%d y=%d..%d", path, kernelCal.Source, kernelCal.MinX, kernelCal.MaxX, kernelCal.MinY, kernelCal.MaxY)
+		return kernelCal
+	}
+	log.Printf("touch calibration for %s: config fallback x=%d..%d y=%d..%d", path, cal.MinX, cal.MaxX, cal.MinY, cal.MaxY)
+	return cal
+}
+
+func (a *app) tap(rawX, rawY int, cal touchCalibration) {
 	if time.Since(a.lastAction) < 500*time.Millisecond {
 		return
 	}
 	a.lastAction = time.Now()
-	x, y := a.normalizeTouch(rawX, rawY)
-	log.Printf("tap raw=(%d,%d) normalized=(%d,%d)", rawX, rawY, x, y)
+	x, y := a.normalizeTouch(rawX, rawY, cal)
+	log.Printf("tap raw=(%d,%d) normalized=(%d,%d) calibration=%s x=%d..%d y=%d..%d", rawX, rawY, x, y, cal.Source, cal.MinX, cal.MaxX, cal.MinY, cal.MaxY)
 	a.mu.Lock()
 	buttons := append([]uiButton(nil), a.buttons...)
 	a.mu.Unlock()
@@ -1096,13 +1151,16 @@ func (a *app) setLastTap(msg string, redraw bool) {
 	a.mu.Unlock()
 }
 
-func (a *app) normalizeTouch(rawX, rawY int) (int, int) {
+func (a *app) normalizeTouch(rawX, rawY int, cal touchCalibration) (int, int) {
 	x, y := rawX, rawY
+	minX, maxX := cal.MinX, cal.MaxX
+	minY, maxY := cal.MinY, cal.MaxY
 	if a.cfg.TouchSwapXY {
 		x, y = y, x
+		minX, maxX, minY, maxY = minY, maxY, minX, maxX
 	}
-	x = scaleTouchAxis(x, a.cfg.TouchMinX, a.cfg.TouchMaxX, a.cfg.ScreenWidth)
-	y = scaleTouchAxis(y, a.cfg.TouchMinY, a.cfg.TouchMaxY, a.cfg.ScreenHeight)
+	x = scaleTouchAxis(x, minX, maxX, a.cfg.ScreenWidth)
+	y = scaleTouchAxis(y, minY, maxY, a.cfg.ScreenHeight)
 	if a.cfg.TouchInvertX {
 		x = a.cfg.ScreenWidth - x
 	}

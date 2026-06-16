@@ -84,6 +84,7 @@ Die Werte koennen inzwischen ueber `extensions/spotify-remote/data/config.json` 
   "touch_swap_xy": false,
   "touch_invert_x": false,
   "touch_invert_y": false,
+  "touch_use_kernel_abs": true,
   "eips_col_width": 22,
   "eips_row_height": 40,
   "button_top": 660,
@@ -92,7 +93,7 @@ Die Werte koennen inzwischen ueber `extensions/spotify-remote/data/config.json` 
 }
 ```
 
-Der wichtigste Fix fuer die Touch-Steuerung: Rohwerte werden nicht mehr nur dann skaliert, wenn sie groesser als die Bildschirmgroesse sind. Sie werden immer ueber `touch_min_*` bis `touch_max_*` in Bildschirmkoordinaten umgerechnet. Das ist wichtig, weil Kindle-Touchcontroller auch Rohwerte unterhalb der Displaybreite liefern koennen, die trotzdem aus einem 0..4095-Koordinatensystem stammen.
+Der wichtigste Fix fuer die Touch-Steuerung: Die App liest standardmaessig die echten ABS-Min/Max-Werte des jeweiligen `/dev/input/event*` per Kernel-`EVIOCGABS` aus. Dadurch funktioniert sie sowohl mit Touchcontrollern, die rohe Werte wie `0..4095` liefern, als auch mit Kindle/Firmware-Kombinationen, die bereits niedrigere Bildschirm- oder Framebuffer-nahe Koordinaten melden. Wenn die Kernelwerte auf einem Modell falsch sind, kann `"touch_use_kernel_abs": false` gesetzt werden; dann werden wieder `touch_min_*` und `touch_max_*` aus `data/config.json` verwendet.
 
 ## Externe Research-Notizen von Gemini
 
@@ -194,7 +195,8 @@ Wichtig fuer Wartung und Portierung:
 
 - Nicht annehmen, dass `/dev/input/event1` immer der Touchscreen ist.
 - Das aktuelle Scannen von `/dev/input/event0` bis `/dev/input/event11` ist bewusst defensiv.
-- Rohwerte muessen immer ueber `touch_min_*`, `touch_max_*`, `touch_swap_xy`, `touch_invert_x` und `touch_invert_y` kalibrierbar bleiben.
+- Die App sollte zuerst die Kernel-ABS-Ranges des Event-Devices verwenden und nur bei Bedarf auf manuelle `touch_min_*`/`touch_max_*`-Werte zurueckfallen.
+- Rohwerte muessen weiterhin ueber `touch_min_*`, `touch_max_*`, `touch_swap_xy`, `touch_invert_x` und `touch_invert_y` kalibrierbar bleiben.
 - Neue Kindle-Modelle koennen andere Event-Codes oder Achsenbereiche liefern.
 - Die UI sollte immer Tap-Diagnosen wie `raw=x,y xy=x,y` anzeigen oder loggen, damit Kalibrierung ohne Debugger moeglich bleibt.
 
@@ -489,6 +491,7 @@ Pruefen:
 - Zeigt die UI nach einem Tap `Tap ...` oder `Miss ...` an?
 - Stimmen `raw=x,y` und `xy=x,y` im letzten Tap-Hinweis?
 - Falls Rohwerte ankommen, aber `xy` falsch ist: `touch_min_*`, `touch_max_*`, `touch_swap_xy` und `touch_invert_*` in `data/config.json` anpassen.
+- Falls die Kernel-ABS-Erkennung falsche Bereiche meldet: `"touch_use_kernel_abs": false` setzen und die manuellen Touchbereiche verwenden.
 - Falls `xy` stimmt, aber die sichtbaren Zeilen verschoben sind: `eips_row_height`, `button_top`, `button_height` und `button_gap` anpassen.
 
 Interpretation der Touch-Diagnose:
