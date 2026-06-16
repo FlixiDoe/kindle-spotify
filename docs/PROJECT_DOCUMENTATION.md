@@ -472,7 +472,8 @@ user-read-playback-state user-modify-playback-state user-read-currently-playing
 
 Wichtige Dateien:
 
-- `data/config.json`: Client ID, Redirect URI, Port, Refresh-Intervall.
+- `data/config.json`: lokale User-Konfiguration mit eigener Spotify Client ID, Redirect URI, Port, Refresh-Intervall. Diese Datei wird nicht committed.
+- `data/config.example.json`: public-sichere Vorlage ohne echte Client ID.
 - `data/oauth.json`: temporaerer PKCE State und Code Verifier waehrend Login.
 - `data/token.json`: Access Token, Refresh Token und Ablaufzeit.
 - `data/callback.txt`: manueller Login-Fallback fuer Redirect-URL oder Code.
@@ -497,6 +498,8 @@ Diese Dateien enthalten lokale oder private Daten:
 - `extensions/spotify-remote/logs/spotify-remote.log`
 
 `token.json` enthaelt Spotify-Zugriffsdaten. Diese Datei sollte nicht oeffentlich geteilt werden. Wenn das Repository irgendwann auf GitHub soll, sollten Token, Logs und personenbezogene Geraetedaten vorher entfernt oder in `.gitignore` ausgelagert werden.
+
+Die App erzeugt `data/config.json` automatisch aus sicheren Defaults, falls die Datei fehlt. Public-Nutzer muessen danach nur `client_id` mit ihrer eigenen Spotify Developer App Client ID ersetzen. Ein Client Secret darf nicht eingetragen werden, weil der Kindle-Speicher nicht als geheim gelten kann und OAuth PKCE genau diesen Public-Client-Fall abdeckt.
 
 ## Build
 

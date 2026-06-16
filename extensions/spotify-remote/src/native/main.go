@@ -23,7 +23,10 @@ import (
 	"time"
 )
 
-const scopes = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+const (
+	scopes                     = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+	placeholderSpotifyClientID = "PASTE_SPOTIFY_CLIENT_ID_HERE"
+)
 
 type config struct {
 	ClientID          string `json:"client_id"`
@@ -616,7 +619,7 @@ func (a *app) kualStatus() {
 
 func (a *app) kualLogin() {
 	if !validClientID(a.cfg.ClientID) {
-		a.kualPrint("Spotify Client ID missing", "Edit data/config.json")
+		a.kualPrint("Spotify Client ID missing", "Edit data/config.json", "Use your own Client ID.", "Do not add a Client Secret.")
 		return
 	}
 	verifier := randomString(64)
@@ -678,7 +681,7 @@ func (a *app) kualLogin() {
 
 func (a *app) kualLoginFile() {
 	if !validClientID(a.cfg.ClientID) {
-		a.kualPrint("Spotify Client ID missing", "Edit data/config.json")
+		a.kualPrint("Spotify Client ID missing", "Edit data/config.json", "Use your own Client ID.", "Do not add a Client Secret.")
 		return
 	}
 	authURL, err := a.prepareAuthURL()
@@ -864,8 +867,13 @@ func (a *app) setupLog() {
 
 func (a *app) loadConfig() error {
 	a.cfg = defaultConfig()
-	err := readJSON(filepath.Join(a.base, "data", "config.json"), &a.cfg)
+	path := filepath.Join(a.base, "data", "config.json")
+	err := readJSON(path, &a.cfg)
 	if os.IsNotExist(err) {
+		if writeErr := writeJSON(path, &a.cfg); writeErr != nil {
+			return writeErr
+		}
+		log.Printf("created local config template: %s", path)
 		return nil
 	}
 	a.normalizeConfig()
@@ -874,6 +882,7 @@ func (a *app) loadConfig() error {
 
 func defaultConfig() config {
 	return config{
+		ClientID:          placeholderSpotifyClientID,
 		Redirect:          "http://127.0.0.1:8787/callback",
 		Port:              8787,
 		RefreshSec:        8,

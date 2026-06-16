@@ -20,7 +20,10 @@ import (
 	"time"
 )
 
-const scopes = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+const (
+	scopes                     = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+	placeholderSpotifyClientID = "PASTE_SPOTIFY_CLIENT_ID_HERE"
+)
 
 type config struct {
 	ClientID       string `json:"client_id"`
@@ -103,12 +106,27 @@ func detectBaseDir() string {
 }
 
 func (a *app) loadConfig() error {
-	a.cfg = config{RedirectURI: "http://127.0.0.1:8787/callback", Port: 8787, RefreshSeconds: 8, ShowCover: true}
-	return readJSON(filepath.Join(a.baseDir, "data", "config.json"), &a.cfg)
+	a.cfg = defaultConfig()
+	path := filepath.Join(a.baseDir, "data", "config.json")
+	err := readJSON(path, &a.cfg)
+	if os.IsNotExist(err) {
+		return a.saveConfig()
+	}
+	return err
 }
 
 func (a *app) saveConfig() error {
 	return writeJSON(filepath.Join(a.baseDir, "data", "config.json"), &a.cfg, 0600)
+}
+
+func defaultConfig() config {
+	return config{
+		ClientID:       placeholderSpotifyClientID,
+		RedirectURI:    "http://127.0.0.1:8787/callback",
+		Port:           8787,
+		RefreshSeconds: 8,
+		ShowCover:      true,
+	}
 }
 
 func readJSON(path string, out any) error {

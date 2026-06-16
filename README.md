@@ -88,7 +88,7 @@ http://127.0.0.1:8787/callback
 ```
 
 4. Copy the Client ID.
-5. Create `extensions/spotify-remote/data/config.json` from the example:
+5. Create `extensions/spotify-remote/data/config.json` from the example, or start the app once and let it create a local template automatically:
 
 ```json
 {
@@ -115,7 +115,9 @@ http://127.0.0.1:8787/callback
 }
 ```
 
-Do not use or store a Spotify Client Secret on the Kindle. This project uses PKCE because the Kindle storage should be treated as user-accessible.
+Replace only `client_id` with your own Spotify app Client ID. Do not use or store a Spotify Client Secret on the Kindle. This project uses PKCE because the Kindle storage should be treated as user-accessible.
+
+`data/config.json` is intentionally ignored by Git. Public releases include `data/config.example.json` only, so every user can add their own Spotify app data locally.
 
 ## Build
 

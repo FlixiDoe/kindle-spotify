@@ -44,8 +44,10 @@ http://127.0.0.1:8787/callback
 ```
 
 4. Kopiere die Client ID.
-5. Trage sie auf dem Kindle in der Setup-Maske ein oder direkt in `data/config.json`.
-6. Kein Client Secret verwenden.
+5. Trage sie direkt in `data/config.json` ein. Falls die Datei noch fehlt, startet die App einmal und legt automatisch eine lokale Vorlage an.
+6. Nur die `client_id` ersetzen. Kein Client Secret verwenden.
+
+`data/config.json` ist absichtlich nicht im Git-Repository. Public-User bekommen nur `data/config.example.json` und tragen ihre eigenen Spotify-App-Daten lokal ein.
 
 ## Build / Cross-Compile
 
