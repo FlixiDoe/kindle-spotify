@@ -382,7 +382,7 @@ menu.json -> launch.sh -> run-native.sh -> bin/spotify-remote-arm
 
 Der Launcher bevorzugt `bin/spotify-remote-arm.new`, wenn diese Datei existiert. Dadurch kann ein neuer Build per USB bereitgestellt werden, ohne die moeglicherweise noch laufende oder vom Kindle gelockte Datei `bin/spotify-remote-arm` direkt zu ersetzen.
 
-Auf neueren Kindle/PW5-Firmwares kann der Framework-Rueckweg nach dem Beenden visuell haengen bleiben, obwohl der native Prozess beendet ist. Der dokumentierte erste Recovery-Schritt ist dann: unteren physischen Display-/Power-Knopf einmal druecken, Display ausschalten lassen und den Kindle wieder wecken. Das ist schneller und weniger invasiv als ein Reboot. Wenn das nicht reicht, `Recover Kindle UI` in KUAL verwenden.
+Auf neueren Kindle/PW5-Firmwares kann der Framework-Rueckweg nach dem Beenden visuell haengen bleiben, obwohl der native Prozess beendet ist. Typische Symptome sind weisser Screen, ein halb gezeichneter Startbildschirm oder ein scheinbar eingefrorenes Display direkt nach dem Schliessen der Spotify-App. Der dokumentierte erste Recovery-Schritt ist dann ausdruecklich kein Reboot: unteren physischen Display-/Power-Knopf einmal druecken, Display ausschalten lassen und den Kindle wieder wecken. Das triggert in der Praxis den saubersten Framework-Redraw. Wenn das nicht reicht, `Recover Kindle UI` in KUAL verwenden. Reboot bleibt der letzte Ausweg.
 
 ### Now Playing Display
 

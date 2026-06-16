@@ -136,7 +136,7 @@ Kindle Browser laedt localhost nicht: Server per `Start Spotify Remote` starten,
 
 Binary startet nicht: `bin/spotify-remote-arm` muss fuer Kindle ARM gebaut und ausfuehrbar sein. Bei FAT/USB-Kopien kann das Execute-Bit fehlen; MRPI/KUAL setzt es oft nicht automatisch. Wenn moeglich, ZIP so erzeugen, dass `start.sh`, `stop.sh` und das Binary executable bleiben. Ohne Shell-Zugriff ist ein korrekt gepacktes Archiv wichtig.
 
-Kindle UI kommt nach dem Schliessen nicht sauber zurueck: Auf neueren Kindle/PW5-Firmwares kann die native Vollbild-App zwar beendet sein, aber der Kindle-Framework-Screen bleibt optisch haengen. Druecke dann einmal den unteren physischen Display-/Power-Knopf, sodass das Display ausgeht, und wecke den Kindle wieder. Das ist der bevorzugte erste Recovery-Schritt vor einem Reboot. Falls das nicht hilft: `Recover Kindle UI` in KUAL ausfuehren oder zuletzt rebooten.
+Kindle UI kommt nach dem Schliessen nicht sauber zurueck: Auf neueren Kindle/PW5-Firmwares kann die native Vollbild-App zwar beendet sein, aber der Kindle-Framework-Screen bleibt optisch haengen oder weiss stehen. Das ist ein bekannter Recovery-Fall. Erster Schritt: einmal den unteren physischen Display-/Power-Knopf druecken, sodass das Display ausgeht, dann den Kindle wieder wecken. Erst wenn das nicht hilft, `Recover Kindle UI` in KUAL ausfuehren. Reboot ist der letzte Ausweg.
 
 ## Grenzen
 

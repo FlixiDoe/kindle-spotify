@@ -255,13 +255,15 @@ Default Paperwhite 11/PW5 calibration:
 
 Kindle UI does not return
 
-Run `Recover Kindle UI` from KUAL or execute:
+Known PW5/newer-firmware behavior: closing the native fullscreen app can leave the Kindle visually stuck on a white, stale, or half-redrawn screen even when the Spotify process has already exited. The first recovery step is hardware-only: press the lower physical display/power button once so the screen turns off, then wake the Kindle again. This usually makes the Kindle framework redraw and is faster than rebooting.
+
+Only if that does not recover the UI, run `Recover Kindle UI` from KUAL or execute:
 
 ```sh
 sh /mnt/us/extensions/spotify-remote/recover.sh
 ```
 
-On newer Kindle firmware/PW5 devices, closing a fullscreen native app may leave the framework visually stuck even after the app exits. In that case, press the lower physical display/power button once to turn the display off, then wake the Kindle again. This usually lets the Kindle framework redraw without a full reboot. If it still does not return, use `Recover Kindle UI` or reboot as the last resort.
+Use a full reboot only as the last resort.
 
 ## Security And Publishing Notes
 
