@@ -25,6 +25,7 @@ Zusaetzlich liegt noch eine Browser-basierte Web-Remote im Projekt, die ueber ei
       crash-log-*.log
   extensions/
     spotify-remote/
+      config.xml
       menu.json
       launch.sh
       run-native.sh
@@ -50,6 +51,7 @@ Zusaetzlich liegt noch eine Browser-basierte Web-Remote im Projekt, die ueber ei
         style.css
         app.js
     spotifyremote/
+      config.xml
       menu.json
 ```
 
@@ -247,6 +249,85 @@ Einige Aussagen aus dem Gemini-Text sind als Richtung plausibel, aber fuer diese
 - Always-On-RTC-Wakeup-Design ist fuer eine Spotify-Fernbedienung aktuell Overengineering. Es wird erst relevant, wenn das Projekt zu einem dauerhaft laufenden Dashboard ausgebaut wird.
 - Eine vollstaendige Abkehr von `eips` ist nicht erforderlich. `fbink` ist ein guter Ausbaupfad, aber keine harte Voraussetzung fuer die aktuelle Touch-Remote.
 
+## Gepruefte Kindle-/KUAL-Dokumentation
+
+Dieser Abschnitt fasst die zusaetzlich geprueften Doku-Startpunkte zusammen. Die Links stammen aus der bereitgestellten Doku-Liste und wurden gegen die Projektarchitektur abgeglichen.
+
+### MobileRead Kindle Developer's Corner
+
+MobileRead bleibt der wichtigste Community-Ort fuer Kindle-Jailbreak, KUAL, MRPI, USBNetwork, native Tools und historische Kindle-Hacks. Fuer dieses Projekt ist MobileRead vor allem relevant, wenn KUAL selbst nicht startet, Menues nicht angezeigt werden oder ein Firmware-/DevCert-/MKK-Problem vorliegt.
+
+Projektregel:
+
+- App-Bugs zuerst ueber `logs/spotify-remote.log`, `status.txt` und KUAL-Menuepfade debuggen.
+- KUAL-Installations- oder Signaturprobleme getrennt davon behandeln; diese liegen meist ausserhalb der Spotify-App.
+
+Quelle: `https://www.mobileread.com/forums/forumdisplay.php?f=150`
+
+### KindleModding: KUAL und MRPI
+
+Die KindleModding-Doku bestaetigt den modernen Installationspfad fuer Homebrew: KUAL und MRPI installieren, `extensions` und `mrpackages` korrekt auf den Kindle kopieren und MRPI ueber `;log mrpi` starten. Sie weist auch auf freien Speicher, Airplane Mode beim Speicher-Fuellen und Dateinamenprobleme bei Downloads hin.
+
+Fuer dieses Projekt bedeutet das:
+
+- Das Release-Paket muss einen direkt kopierbaren Ordner `spotify-remote` fuer `/mnt/us/extensions/` enthalten.
+- Die ARM-Binary muss im Release-ZIP enthalten und auf dem Kindle ausfuehrbar sein.
+- Installationsprobleme wie fehlendes KUAL, fehlendes MRPI oder falsche KUAL-Variante sind nicht durch App-Code zu loesen.
+
+Quelle: `https://kindlemodding.org/jailbreaking/post-jailbreak/installing-kual-mrpi/`
+
+### KUAL Booklet README
+
+Das KUAL-Booklet-README von NiLuJe bestaetigt, dass KUAL als Launcher fuer viele Kindle-Generationen gepflegt wird, inklusive PW5-Klasse. Es ist damit die richtige Laufzeitannahme fuer diese App, solange der Kindle bereits jailbroken ist und KUAL funktioniert.
+
+Quelle: `https://github.com/NiLuJe/KUAL_Booklet/blob/master/README.txt`
+
+### WebLaunch
+
+WebLaunch ist eine KUAL-Extension, die URLs auf Kindle Touch/PaperWhite ohne normalen Browserrahmen oeffnet und dadurch eine Web-App nativer wirken laesst. Das passt als Alternativpfad zur vorhandenen Browser-Remote, aber nicht als Ersatz fuer die aktuelle native Touch-App.
+
+Bewertung fuer Spotify Remote:
+
+- Gut fuer einen spaeteren UI-Fallback: lokaler HTTP-Server plus rahmenlose WebLaunch-Ansicht.
+- Riskant als Haupt-UI, weil Kindle-WebKit alt ist und Spotify/OAuth/modernes JavaScript begrenzt laufen koennen.
+- Sinnvoll als Debug-/Fallback-Modus, wenn native evdev-Touch-Steuerung auf einem Modell noch Probleme macht.
+
+Quelle: `https://github.com/PaulFreund/WebLaunch`
+
+### KOReader Developer Docs
+
+KOReader ist fuer dieses Projekt keine direkte Zielplattform, aber eine gute Referenz fuer robuste Kindle-nahe UI- und Input-Architektur. Die KOReader-Doku beschreibt den Frontend-Teil als Lua-basiert und verweist auf eine eigene Widget-/Input-/Device-Schicht.
+
+Projektableitung:
+
+- KOReader-Plugin ist fuer diese Spotify-Remote aktuell nicht der beste erste Weg.
+- KOReader bleibt aber eine gute Referenz fuer Touch-Handling, E-Ink-UI, Power-Management und Firmware-Unterschiede.
+- Wenn die App spaeter als KOReader-Plugin gedacht wird, waere die Struktur `plugin.koplugin/_meta.lua` und `main.lua` ein separater Architekturpfad.
+
+Quelle: `https://koreader.rocks/doc/topics/Development_guide.md.html`
+
+### KUAL-Struktur aus Referenzprojekten
+
+KOReader, WebLaunch und kleinere KUAL-Projekte verwenden typischerweise `config.xml` plus `menu.json`. Deshalb enthaelt dieses Projekt jetzt fuer beide vorhandenen Extension-Ordner eine minimale `config.xml`:
+
+```text
+extensions/spotify-remote/config.xml
+extensions/spotifyremote/config.xml
+```
+
+Die `id` muss zum jeweiligen Ordnernamen passen:
+
+```text
+spotify-remote -> <id>spotify-remote</id>
+spotifyremote  -> <id>spotifyremote</id>
+```
+
+Die Menuequelle bleibt jeweils:
+
+```xml
+<menu type="json" dynamic="true">menu.json</menu>
+```
+
 ## Architektur
 
 ### Native Touch Remote
@@ -309,13 +390,20 @@ Die Hauptdefinition liegt in:
 extensions/spotify-remote/menu.json
 ```
 
+Die zugehoerige KUAL-Metadatei liegt in:
+
+```text
+extensions/spotify-remote/config.xml
+```
+
 Es gibt ausserdem:
 
 ```text
 extensions/spotifyremote/menu.json
+extensions/spotifyremote/config.xml
 ```
 
-Dieser zweite Ordner enthaelt eine gespiegelt benannte Menue-Datei. Er sollte synchron gehalten werden, falls KUAL oder eine Kopierhistorie noch auf `spotifyremote` statt `spotify-remote` zeigt.
+Dieser zweite Ordner enthaelt gespiegelt benannte KUAL-Dateien. Er sollte synchron gehalten werden, falls KUAL oder eine Kopierhistorie noch auf `spotifyremote` statt `spotify-remote` zeigt.
 
 Aktuelle Menuepunkte:
 
@@ -540,6 +628,9 @@ Pruefen:
 - Nach Menue-Aenderungen beide Menue-Dateien synchron halten:
   - `extensions/spotify-remote/menu.json`
   - `extensions/spotifyremote/menu.json`
+- Nach KUAL-Metadaten-Aenderungen beide `config.xml`-Dateien pruefen:
+  - `extensions/spotify-remote/config.xml`
+  - `extensions/spotifyremote/config.xml`
 - Nach Native-Aenderungen `build.ps1` oder `build.sh` ausfuehren und die ZIPs neu erzeugen.
 
 ## Verifikationsbefehle

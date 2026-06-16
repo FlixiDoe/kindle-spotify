@@ -40,6 +40,7 @@ docs/
   PROJECT_DOCUMENTATION.md Internal implementation and deployment notes
   crash-logs/              Historical crash logs kept for debugging context
 extensions/spotify-remote/
+  config.xml                KUAL extension metadata
   menu.json                 KUAL menu definition
   launch.sh                 Starts the native touch remote through run-native.sh
   run-native.sh             Stops Kindle framework, runs native binary, restores framework
@@ -185,6 +186,7 @@ chmod 755 /mnt/us/extensions/spotify-remote/bin/spotify-remote-arm
 
 ## KUAL Menu
 
+- `config.xml`: KUAL extension metadata and menu registration.
 - `Touch Remote`: native touch UI for controlling Spotify.
 - `Now Playing Display`: passive display-only now-playing screen.
 - `Stop Now Playing Display`: stops the passive display.
