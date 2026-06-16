@@ -281,9 +281,9 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkText(4, 21, safe(albumName, 24))
 	a.fbinkText(4, 27, progress+"          "+duration)
 	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
-	eips(22, 0, "VOL +")
-	eips(25, 0, volume+"%")
-	eips(28, 0, "VOL -")
+	a.fbinkText(3, 31, "VOL +")
+	a.fbinkText(3, 34, "VOL "+volume+"%")
+	a.fbinkText(3, 37, "VOL -")
 	a.fbinkText(3, 39, "SHUF "+shuffle+"  REP "+repeat)
 	log.Printf("FBInk UI drawn: %s / %s", title, artist)
 }
@@ -512,9 +512,9 @@ func (a *app) queueUIAction(out chan<- string, rawX, rawY int, cal touchCalibrat
 
 func (a *app) fbinkTouchZones() []uiTouchZone {
 	return []uiTouchZone{
-		{Action: "volup", Label: "vol-up-left", X1: 0, Y1: 820, X2: 270, Y2: 1015},
-		{Action: "voldown", Label: "vol-down-left", X1: 0, Y1: 1030, X2: 270, Y2: 1185},
-		{Action: "prev", Label: "prev", X1: 0, Y1: 1190, X2: 420, Y2: 1590},
+		{Action: "volup", Label: "vol-up-left", X1: 0, Y1: 1190, X2: 300, Y2: 1335},
+		{Action: "voldown", Label: "vol-down-left", X1: 0, Y1: 1410, X2: 300, Y2: 1590},
+		{Action: "prev", Label: "prev", X1: 300, Y1: 1190, X2: 420, Y2: 1590},
 		{Action: "playpause", Label: "playpause", X1: 438, Y1: 1235, X2: 796, Y2: 1480},
 		{Action: "next", Label: "next", X1: 820, Y1: 1210, X2: 1115, Y2: 1590},
 		{Action: "quit", Label: "quit-corner", X1: 980, Y1: 1490, X2: 1236, Y2: 1648},
