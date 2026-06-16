@@ -226,6 +226,10 @@ func (a *app) uiControl(action string) {
 		a.kualVolume(10)
 	case "voldown":
 		a.kualVolume(-10)
+	case "shuffle":
+		a.kualToggleShuffle()
+	case "repeat":
+		a.kualToggleRepeat()
 	}
 }
 
@@ -512,6 +516,8 @@ func (a *app) fbinkTouchZones() []uiTouchZone {
 	return []uiTouchZone{
 		{Action: "voldown", Label: "vol-down-mid", X1: 420, Y1: 1020, X2: 585, Y2: 1168},
 		{Action: "volup", Label: "vol-up-mid", X1: 720, Y1: 1020, X2: 885, Y2: 1168},
+		{Action: "shuffle", Label: "shuffle", X1: 390, Y1: 900, X2: 660, Y2: 1015},
+		{Action: "repeat", Label: "repeat", X1: 705, Y1: 900, X2: 970, Y2: 1015},
 		{Action: "prev", Label: "prev", X1: 0, Y1: 1190, X2: 420, Y2: 1590},
 		{Action: "playpause", Label: "playpause", X1: 438, Y1: 1235, X2: 796, Y2: 1480},
 		{Action: "next", Label: "next", X1: 820, Y1: 1210, X2: 1115, Y2: 1590},

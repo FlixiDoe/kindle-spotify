@@ -585,7 +585,7 @@ chmod 755 /mnt/us/extensions/spotify-remote/bin/spotify-remote-arm
 2. KUAL auf dem Kindle oeffnen.
 3. `Spotify Remote -> Now Playing Display` starten.
 4. Bei Bedarf Login ausfuehren.
-5. Danach Play/Pause, Next, Previous, die mittigen `VOL- xx% VOL+` Touchflaechen, Shuffle, Repeat oder Devices nutzen.
+5. Danach Play/Pause, Next, Previous, die mittigen `VOL- xx% VOL+` Touchflaechen sowie die `SHUF`/`REP` Statuslabels fuer Shuffle und Repeat nutzen. Repeat schaltet `off`, `context` und `track` zyklisch durch.
 
 ### Manueller Login-Fallback
 

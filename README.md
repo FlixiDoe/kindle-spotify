@@ -216,6 +216,7 @@ Preferred flow:
 4. Return to the remote and refresh playback.
 
 Volume can be adjusted with the centered `VOL-  xx%  VOL+` touch areas between the status row and playback controls.
+Shuffle and repeat can be toggled by tapping the `SHUF` and `REP` status labels. Repeat cycles through Spotify's `off`, `context`, and `track` modes.
 
 Manual fallback:
 
