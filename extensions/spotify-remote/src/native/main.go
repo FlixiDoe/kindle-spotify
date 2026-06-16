@@ -622,8 +622,8 @@ func (a *app) showDevices() {
 			label = "* " + label
 		}
 		devID := d.ID
-		eips(row, 0, safe(label, 45))
-		a.buttons = append(a.buttons, uiButton{Label: label, X1: 0, Y1: rowToY(row), X2: 1072, Y2: rowToY(row + 2), Do: func() {
+		eips(row, 0, safe(label, 55))
+		a.buttons = append(a.buttons, uiButton{Label: label, X1: 0, Y1: rowToY(row), X2: screenW, Y2: rowToY(row + 2), Do: func() {
 			body := strings.NewReader(fmt.Sprintf(`{"device_ids":["%s"],"play":false}`, devID))
 			_, err := a.spotifyAPI(http.MethodPut, "https://api.spotify.com/v1/me/player", body, nil)
 			a.mu.Lock()
@@ -636,8 +636,8 @@ func (a *app) showDevices() {
 			a.refresh()
 		}})
 	}
-	a.buttons = append(a.buttons, uiButton{Label: "Back", X1: 760, Y1: 1250, X2: 1072, Y2: 1448, Do: func() { a.refresh() }})
-	eips(34, 30, "Back")
+	a.buttons = append(a.buttons, uiButton{Label: "Back", X1: 880, Y1: 1440, X2: screenW, Y2: screenH, Do: func() { a.refresh() }})
+	eips(38, 40, "Back")
 }
 
 func (a *app) login() {
@@ -852,16 +852,16 @@ func (a *app) drawLocked() {
 	a.lastDraw = time.Now()
 	eipsClear()
 	eips(1, 0, "SPOTIFY REMOTE")
-	eips(3, 0, safe("Status: "+a.status, 48))
+	eips(3, 0, safe("Status: "+a.status, 55))
 	if a.err != "" {
 		eips(5, 0, "ERROR:")
-		eips(6, 0, safe(a.err, 48))
+		eips(6, 0, safe(a.err, 55))
 	}
 	row := 9
 	if a.hasState {
-		eips(row, 0, safe(a.state.CurrentTrack.Name, 48))
-		eips(row+1, 0, safe(artistNames(a.state.CurrentTrack.Artists), 48))
-		eips(row+2, 0, safe(a.state.CurrentTrack.Album.Name, 48))
+		eips(row, 0, safe(a.state.CurrentTrack.Name, 55))
+		eips(row+1, 0, safe(artistNames(a.state.CurrentTrack.Artists), 55))
+		eips(row+2, 0, safe(a.state.CurrentTrack.Album.Name, 55))
 		eips(row+4, 0, fmt.Sprintf("%s  %s  Vol %d", playText(a.state.IsPlaying), fmtProgress(a.state.ProgressMS, a.state.CurrentTrack.DurationMS), a.state.Device.VolumePercent))
 		eips(row+5, 0, fmt.Sprintf("Shuffle %v  Repeat %s", a.state.Shuffle, a.state.Repeat))
 	} else {
@@ -869,28 +869,30 @@ func (a *app) drawLocked() {
 		eips(row+1, 0, "Tap LOGIN first.")
 	}
 	a.buttons = []uiButton{
-		a.button(0, "LOGIN", func() { go a.control("login") }),
-		a.button(1, "REFRESH", func() { go a.refresh() }),
-		a.button(2, "PREVIOUS", func() { go a.control("prev") }),
-		a.button(3, "PLAY / PAUSE", func() { go a.control("playpause") }),
-		a.button(4, "NEXT", func() { go a.control("next") }),
-		a.button(5, "VOLUME -", func() { go a.control("voldown") }),
-		a.button(6, "VOLUME +", func() { go a.control("volup") }),
-		a.button(7, "SHUFFLE", func() { go a.control("shuffle") }),
-		a.button(8, "REPEAT", func() { go a.control("repeat") }),
-		a.button(9, "DEVICES", func() { go a.control("devices") }),
+		a.button(0, "PREVIOUS", func() { go a.control("prev") }),
+		a.button(1, "PLAY / PAUSE", func() { go a.control("playpause") }),
+		a.button(2, "NEXT", func() { go a.control("next") }),
+		a.button(3, "VOLUME -", func() { go a.control("voldown") }),
+		a.button(4, "VOLUME +", func() { go a.control("volup") }),
+		a.button(5, "SHUFFLE", func() { go a.control("shuffle") }),
+		a.button(6, "REPEAT", func() { go a.control("repeat") }),
+		a.button(7, "DEVICES", func() { go a.control("devices") }),
+		a.button(8, "REFRESH", func() { go a.refresh() }),
+		a.button(9, "LOGIN", func() { go a.control("login") }),
 		a.button(10, "QUIT", func() { go a.control("quit") }),
 	}
 	for i, b := range a.buttons {
-		r := yToRow(b.Y1) + 1
-		eips(r, 0, "------------------------------------------------")
+		r := yToRow(b.Y1)
+		eips(r, 0, "--------------------------------------------------------")
 		eips(r+1, 2, fmt.Sprintf("%02d  %s", i+1, b.Label))
 	}
 }
 
 func (a *app) button(slot int, label string, do func()) uiButton {
-	y1 := 600 + slot*74
-	return uiButton{Label: label, X1: 0, Y1: y1, X2: 1072, Y2: y1 + 72, Do: do}
+	// PW5: screen is 1236x1648. Buttons start after the info area.
+	// Each button gets ~90px height for comfortable touch targets.
+	y1 := 660 + slot*90
+	return uiButton{Label: label, X1: 0, Y1: y1, X2: screenW, Y2: y1 + 88, Do: do}
 }
 
 func eipsClear() {
@@ -908,6 +910,13 @@ func openBrowser(raw string) {
 	_ = exec.Command("lipc-set-prop", "com.lab126.appmgrd", "start", "app://com.lab126.browser?url="+raw).Run()
 }
 
+// PW5 screen dimensions in pixels
+const (
+	screenW     = 1236
+	screenH     = 1648
+	touchMaxRaw = 4095 // capacitive touchscreen raw coordinate range
+)
+
 type inputEvent struct {
 	Sec   int32
 	Usec  int32
@@ -917,10 +926,16 @@ type inputEvent struct {
 }
 
 func (a *app) touchLoop() {
+	opened := make(map[string]bool)
 	for {
 		for i := 0; i < 12; i++ {
 			p := "/dev/input/event" + strconv.Itoa(i)
-			go a.readInput(p)
+			if !opened[p] {
+				if _, err := os.Stat(p); err == nil {
+					opened[p] = true
+					go a.readInput(p)
+				}
+			}
 		}
 		time.Sleep(30 * time.Second)
 	}
@@ -933,22 +948,41 @@ func (a *app) readInput(path string) {
 	}
 	defer f.Close()
 	var x, y int
+	var hasCoords bool
+	var touching bool
 	for {
 		var ev inputEvent
 		if err := binary.Read(f, binary.LittleEndian, &ev); err != nil {
 			return
 		}
 		switch ev.Type {
-		case 3:
-			if ev.Code == 0 || ev.Code == 0x35 {
+		case 3: // EV_ABS
+			switch ev.Code {
+			case 0x00, 0x35: // ABS_X, ABS_MT_POSITION_X
 				x = int(ev.Value)
-			}
-			if ev.Code == 1 || ev.Code == 0x36 {
+				hasCoords = true
+			case 0x01, 0x36: // ABS_Y, ABS_MT_POSITION_Y
 				y = int(ev.Value)
+				hasCoords = true
 			}
-		case 1:
-			if ev.Code == 0x14a && ev.Value == 0 {
+		case 1: // EV_KEY
+			switch ev.Code {
+			case 0x14a: // BTN_TOUCH
+				if ev.Value == 1 {
+					touching = true
+				} else if ev.Value == 0 && hasCoords {
+					// Touch release — fire tap
+					a.tap(x, y)
+					hasCoords = false
+					touching = false
+				}
+			}
+		case 0: // EV_SYN (SYN_REPORT)
+			// Some PW5 firmware versions don't send BTN_TOUCH.
+			// Use SYN_REPORT with coordinates as fallback for single-tap.
+			if !touching && hasCoords && ev.Code == 0 {
 				a.tap(x, y)
+				hasCoords = false
 			}
 		}
 	}
@@ -971,19 +1005,19 @@ func (a *app) tap(rawX, rawY int) {
 			return
 		}
 	}
-	log.Printf("tap missed")
+	log.Printf("tap missed at (%d,%d)", x, y)
 }
 
 func normalizeTouch(x, y int) (int, int) {
-	if x > 1072 || y > 1448 {
-		if x > 0 {
-			x = x * 1072 / 4095
-		}
-		if y > 0 {
-			y = y * 1448 / 4095
-		}
+	// PW5 capacitive touch reports 0-4095 raw values.
+	// Always normalize to screen pixel coordinates.
+	if x > screenW {
+		x = x * screenW / touchMaxRaw
 	}
-	return clamp(x, 0, 1072), clamp(y, 0, 1448)
+	if y > screenH {
+		y = y * screenH / touchMaxRaw
+	}
+	return clamp(x, 0, screenW), clamp(y, 0, screenH)
 }
 
 func validClientID(id string) bool {
@@ -1036,10 +1070,11 @@ func safe(s string, n int) string {
 	return string(r[:n-3]) + "..."
 }
 
+// PW5 eips character grid: ~22px per column, ~40px per row at default font
 func xToCol(x int) int { return x / 22 }
-func yToRow(y int) int { return y / 36 }
+func yToRow(y int) int { return y / 40 }
 func rowToY(row int) int {
-	return row * 36
+	return row * 40
 }
 
 func clamp(v, lo, hi int) int {

@@ -100,8 +100,9 @@ Token werden in `data/token.json` gespeichert und automatisch erneuert. Wenn der
 
 ## KUAL Menue
 
-- Start Spotify Remote: startet den Server und versucht den Browser zu oeffnen.
-- Open Spotify Remote: startet bei Bedarf und oeffnet `http://127.0.0.1:8787`.
+- Touch Remote: startet die native Vollbild-App mit Touch-Flaechen fuer Play/Pause, Next, Previous, Lautstaerke, Shuffle, Repeat, Devices, Refresh und Login.
+- Now Playing Display: startet eine passive Vollbild-Anzeige fuer den aktuellen Titel. Diese Ansicht nimmt keine Touch- oder Texteingaben an; Steuerung laeuft weiter ueber KUAL oder Touch Remote.
+- Stop Now Playing Display: beendet die passive Anzeige.
 - Stop Spotify Remote: beendet den Server ueber PID-Datei.
 - Show Log: versucht `logs/spotify-remote.log` im Browser zu oeffnen.
 
