@@ -6,7 +6,7 @@ This project provides a Kindle-friendly Spotify remote with a native e-ink touch
 
 This is an independent hobby project and is not affiliated with, endorsed by, sponsored by, or approved by Spotify AB or Amazon.
 
-![Kindle Spotify Remote running on a Paperwhite](docs/assets/kindle-spotify-remote.jpg)
+![Kindle Spotify Remote running on a Paperwhite](docs/assets/demo_picture.jpg)
 
 ## Features
 
