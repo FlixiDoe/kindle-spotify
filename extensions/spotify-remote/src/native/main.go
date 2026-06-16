@@ -280,9 +280,9 @@ func (a *app) drawFBInkNowPlaying() {
 	}
 	a.fbinkText(4, 25, "====================")
 	a.fbinkText(2, -4, "Refresh 8s. Quit only in lower-right.")
-	a.fbinkText(6, 13, safe(title, 18))
-	a.fbinkText(4, 18, safe(artist, 24))
-	a.fbinkText(4, 21, safe(albumName, 24))
+	a.fbinkText(4, 13, safe(artist, 24))
+	a.fbinkText(6, 16, safe(title, 18))
+	a.fbinkText(4, 19, safe(albumName, 24))
 	a.fbinkText(4, 27, progress+"          "+duration)
 	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
 	a.fbinkText(4, 35, "VOL-  "+volume+"%  VOL+")
