@@ -281,7 +281,7 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkText(4, 21, safe(albumName, 24))
 	a.fbinkText(4, 27, progress+"          "+duration)
 	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
-	a.fbinkText(3, 34, "-  VOL "+volume+"%  +")
+	a.fbinkText(4, 35, "VOL-  "+volume+"%  VOL+")
 	a.fbinkText(3, 39, "SHUF "+shuffle+"  REP "+repeat)
 	log.Printf("FBInk UI drawn: %s / %s", title, artist)
 }
