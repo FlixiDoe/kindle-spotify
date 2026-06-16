@@ -184,26 +184,23 @@ chmod 755 /mnt/us/extensions/spotify-remote/bin/spotify-remote-arm
 
 4. Eject the Kindle.
 5. Open KUAL.
-6. Start `Spotify Remote -> Touch Remote`.
+6. Start `Spotify Remote -> Now Playing Display`.
 
 ## KUAL Menu
 
 - `config.xml`: KUAL extension metadata and menu registration.
 - `Spotify Remote`: KUAL folder that keeps all Spotify actions grouped instead of spreading them across the main KUAL list.
-- `Touch Remote`: native touch UI for controlling Spotify.
-- `Now Playing Display`: passive display-only now-playing screen.
-- `Stop Now Playing Display`: stops the passive display.
+- `Now Playing Display`: starts the Kindle fullscreen Spotify app.
 - `Create Login URL`: writes a Spotify login URL to `data/login_url.txt`.
 - `Finish Login From callback.txt`: exchanges a pasted redirect URL or code from `data/callback.txt`.
-- `Status`: writes current playback status to `data/status.txt`.
-- `Play / Pause`, `Next`, `Previous`, `Volume +`, `Volume -`, `Shuffle`, `Repeat`: direct KUAL actions.
-- `Recover Kindle UI`: attempts to restore the Kindle framework and clear the screen.
+
+Advanced recovery and direct-control scripts are still shipped in the extension folder, but they are intentionally hidden from the normal KUAL menu so day-to-day use stays small.
 
 ## Login Flow
 
 Preferred flow:
 
-1. Start `Touch Remote`.
+1. Start `Now Playing Display`.
 2. Use `Login`.
 3. Complete Spotify authorization.
 4. Return to the remote and refresh playback.
@@ -232,7 +229,7 @@ Check Kindle Wi-Fi, DNS filtering, router firewall rules, captive portals, and a
 
 Native UI does not respond to touch
 
-Make sure you started `Touch Remote`, not `Now Playing Display`. The native UI prints the latest touch result as `Tap ... raw=x,y xy=x,y` or `Miss ... raw=x,y xy=x,y`. By default the app reads the touchscreen's kernel ABS min/max values from `/dev/input/event*`; this avoids assuming every Kindle uses `0..4095` raw touch coordinates. If normalized `xy` is still wrong, set `"touch_use_kernel_abs": false` and adjust `touch_min_*`, `touch_max_*`, `touch_swap_xy`, or `touch_invert_*` in `data/config.json`. If the UI rows are visually too high or too low, adjust `eips_row_height`, `button_top`, `button_height`, and `button_gap`.
+Make sure you started `Now Playing Display`. The native UI prints the latest touch result as `Tap ... raw=x,y xy=x,y` or `Miss ... raw=x,y xy=x,y`. By default the app reads the touchscreen's kernel ABS min/max values from `/dev/input/event*`; this avoids assuming every Kindle uses `0..4095` raw touch coordinates. If normalized `xy` is still wrong, set `"touch_use_kernel_abs": false` and adjust `touch_min_*`, `touch_max_*`, `touch_swap_xy`, or `touch_invert_*` in `data/config.json`. If the UI rows are visually too high or too low, adjust `eips_row_height`, `button_top`, `button_height`, and `button_gap`.
 
 Default Paperwhite 11/PW5 calibration:
 

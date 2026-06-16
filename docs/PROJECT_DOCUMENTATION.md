@@ -440,20 +440,11 @@ Dieser zweite Ordner enthaelt gespiegelt benannte KUAL-Dateien. Er sollte synchr
 
 Aktuelle Menuepunkte:
 
-- `Touch Remote`: startet die native Vollbild-App mit Touch-Steuerung.
-- `Now Playing Display`: startet die passive Vollbild-Anzeige.
-- `Stop Now Playing Display`: stoppt die passive Anzeige.
+- `Now Playing Display`: startet die Kindle-Vollbild-App.
 - `Create Login URL`: schreibt eine Spotify Login-URL in `data/login_url.txt`.
 - `Finish Login From callback.txt`: liest Redirect-URL oder Code aus `data/callback.txt` und tauscht den Code gegen Token.
-- `Status`: schreibt den aktuellen Spotify-Status in `data/status.txt`.
-- `Play / Pause`: sendet Play/Pause an Spotify.
-- `Next`: naechster Titel.
-- `Previous`: vorheriger Titel.
-- `Volume +`: Lautstaerke um 10 erhoehen.
-- `Volume -`: Lautstaerke um 10 senken.
-- `Shuffle`: Shuffle umschalten.
-- `Repeat`: Repeat-Modus umschalten.
-- `Recover Kindle UI`: beendet laufende Prozesse und startet das Kindle-Framework wieder.
+
+Notfall- und Direktsteuerungs-Kommandos wie Stop, Status, Play/Pause, Next, Previous und Recover bleiben als Skripte/CLI-Funktionen im Projekt vorhanden, sind aber aus dem normalen KUAL-Menue ausgeblendet. Der User sieht damit nur Start und Login.
 
 Auf dem getesteten Kindle wurde ausserdem ein Kompatibilitaets-Fallback ueber `extensions/kindlefetch/menu.json` verwendet: Dort kann ein einzelner `Spotify Remote`-Ordner eingetragen sein, falls KUAL die dedizierten Spotify-Extension-Ordner nicht anzeigt. Dieser Fallback darf nur den Ordner enthalten, nicht wieder flache `Spotify ...`-Eintraege in der KUAL-Hauptliste.
 
@@ -575,8 +566,7 @@ chmod 755 /mnt/us/extensions/spotify-remote/bin/spotify-remote-arm
 
 4. Kindle auswerfen.
 5. KUAL oeffnen.
-6. Fuer Bedienung `Spotify Remote -> Touch Remote` starten.
-7. Fuer reine Anzeige `Spotify Remote -> Now Playing Display` starten.
+6. `Spotify Remote -> Now Playing Display` starten.
 
 ## Bedienung
 
@@ -584,7 +574,7 @@ chmod 755 /mnt/us/extensions/spotify-remote/bin/spotify-remote-arm
 
 1. Auf Handy, Desktop oder Speaker Spotify starten.
 2. KUAL auf dem Kindle oeffnen.
-3. `Spotify Remote -> Touch Remote` starten.
+3. `Spotify Remote -> Now Playing Display` starten.
 4. Bei Bedarf Login ausfuehren.
 5. Danach Play/Pause, Next, Previous, Volume, Shuffle, Repeat oder Devices nutzen.
 

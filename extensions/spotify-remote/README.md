@@ -101,11 +101,11 @@ Token werden in `data/token.json` gespeichert und automatisch erneuert. Wenn der
 ## KUAL Menue
 
 - Spotify Remote: Ordner im KUAL-Menue, damit Spotify nicht als viele einzelne Hauptlisten-Eintraege erscheint.
-- Touch Remote: startet die native Vollbild-App mit Touch-Flaechen fuer Play/Pause, Next, Previous, Lautstaerke, Shuffle, Repeat, Devices, Refresh und Login.
-- Now Playing Display: startet eine passive Vollbild-Anzeige fuer den aktuellen Titel. Diese Ansicht nimmt keine Touch- oder Texteingaben an; Steuerung laeuft weiter ueber KUAL oder Touch Remote.
-- Stop Now Playing Display: beendet die passive Anzeige.
-- Stop Spotify Remote: beendet den Server ueber PID-Datei.
-- Show Log: versucht `logs/spotify-remote.log` im Browser zu oeffnen.
+- Now Playing Display: startet die Kindle-Vollbild-App.
+- Create Login URL: schreibt die Spotify Login-URL nach `data/login_url.txt`.
+- Finish Login From callback.txt: verarbeitet den kopierten Spotify-Redirect aus `data/callback.txt`.
+
+Notfall- und Direktsteuerungs-Skripte bleiben im Extension-Ordner erhalten, sind aber aus dem normalen KUAL-Menue ausgeblendet.
 
 Der Launcher bevorzugt `bin/spotify-remote-arm.new`, falls diese Datei vorhanden und ausfuehrbar ist. Das erleichtert USB-Deployments, wenn `spotify-remote-arm` noch vom Kindle gelockt ist.
 
