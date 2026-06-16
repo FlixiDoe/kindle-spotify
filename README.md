@@ -221,6 +221,7 @@ Shuffle and repeat can be toggled by tapping the `SHUF` and `REP` status labels.
 ## TODO
 
 - Show the current playlist or playback context name in the free space above the playback buttons, between the shuffle/repeat row and the `|< PLAY >|` controls.
+- Show the active Spotify device name in the marked free space so the Kindle display makes clear where music is currently playing.
 
 Manual fallback:
 

@@ -222,6 +222,10 @@ Wichtig fuer Wartung und Portierung:
 
 In der Native-FBInk-Ansicht soll spaeter im freien Bereich zwischen der `SHUF`/`REP`-Statuszeile und den Playback-Buttons der aktuelle Playlist- oder Playback-Context-Name angezeigt werden. Grundlage dafuer ist der `context` aus Spotifys Playback-State; bei Playlist-Kontext muss die App die Context-URI aufloesen und einen kurzen, e-ink-tauglichen Namen rendern. Wenn Spotify keinen Playlist-Kontext liefert, bleibt der Bereich leer oder zeigt einen kurzen neutralen Context-Hinweis.
 
+### TODO: Aktives Spotify-Geraet anzeigen
+
+In derselben unteren Informationszone soll die App den Namen des aktuell spielenden Spotify-Geraets anzeigen, z. B. Handy, Desktop, Speaker oder Browser-Session. Die Daten kommen bereits aus dem Playback-State unter `device.name`; die Anzeige muss kurz genug fuer die E-Ink-Zeile bleiben und darf die Playback-Buttons nicht verschieben.
+
 ### Cross-Compilation und Firmware-Unterschiede
 
 Der Gemini-Research weist auf Architekturunterschiede im Kindle-Oekosystem hin, besonders ARMv6/ARMv7 sowie Softfloat/Hardfloat bei neueren Firmwares. Fuer dieses Projekt ist das Risiko kleiner als bei C/C++-Programmen, weil die native App aktuell mit:

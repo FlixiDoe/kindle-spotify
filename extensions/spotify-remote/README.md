@@ -125,6 +125,7 @@ Der Launcher bevorzugt `bin/spotify-remote-arm.new`, falls diese Datei vorhanden
 ## TODO
 
 - In der Native-Anzeige den aktuellen Playlist- oder Playback-Context-Namen im freien Bereich zwischen `SHUF`/`REP` und den Playback-Buttons anzeigen.
+- In derselben freien Zone den Namen des aktuell spielenden Spotify-Geraets anzeigen, damit direkt sichtbar ist, wo die Musik laeuft.
 
 ## Troubleshooting
 
