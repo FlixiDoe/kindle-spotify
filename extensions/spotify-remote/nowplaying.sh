@@ -93,14 +93,11 @@ while [ ! -f "$STOP_FILE" ]; do
 
   if [ "$PLAYING" = "true" ]; then
     PLAY_ICON="PAUSE"
-    STATE="NOW PLAYING"
   else
     PLAY_ICON="PLAY"
-    STATE="PAUSED"
   fi
 
   if [ -n "$ERROR" ]; then
-    STATE="SPOTIFY REMOTE"
     TITLE="Needs attention"
     ARTIST="$ERROR"
     ALBUM="Use KUAL controls, then refresh"
@@ -110,7 +107,6 @@ while [ ! -f "$STOP_FILE" ]; do
   sleep 1
 
   draw_text 3 5   "SPOTIFY REMOTE"
-  draw_text 2 12  "NOW PLAYING DISPLAY"
   draw_text 2 17  "+====================================+"
   draw_text 2 20  "|                                    |"
   draw_text 2 23  "|            ALBUM COVER             |"
@@ -118,7 +114,6 @@ while [ ! -f "$STOP_FILE" ]; do
   draw_text 2 29  "|                                    |"
   draw_text 2 32  "+====================================+"
 
-  draw_text 2 43  "$STATE"
   draw_text 4 50  "$TITLE"
   draw_text 3 63  "$ARTIST"
   draw_text 2 73  "$ALBUM"

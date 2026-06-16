@@ -232,7 +232,6 @@ func (a *app) drawFBInkNowPlaying() {
 	title := "Spotify Remote"
 	artist := "No active Spotify device"
 	albumName := "Start Spotify on phone or PC"
-	state := "NEEDS ATTENTION"
 	progress := "0:00"
 	duration := "0:00"
 	volume := "?"
@@ -256,10 +255,7 @@ func (a *app) drawFBInkNowPlaying() {
 		repeat = p.Repeat
 		coverPath = a.prepareCover(p.CurrentTrack.Album.Images)
 		if p.IsPlaying {
-			state = "NOW PLAYING"
 			playIcon = "PAUSE"
-		} else {
-			state = "PAUSED"
 		}
 	}
 
@@ -277,7 +273,6 @@ func (a *app) drawFBInkNowPlaying() {
 	}
 	a.fbinkText(4, 25, "====================")
 	a.fbinkText(2, -4, "Refresh 8s. Quit only in lower-right.")
-	a.fbinkText(4, 11, state)
 	a.fbinkText(6, 13, safe(title, 18))
 	a.fbinkText(4, 18, safe(artist, 24))
 	a.fbinkText(4, 21, safe(albumName, 24))
