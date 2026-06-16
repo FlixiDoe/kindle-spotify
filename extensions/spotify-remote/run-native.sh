@@ -6,6 +6,11 @@ PID_FILE="$APP_DIR/data/spotify-remote.pid"
 LAUNCHER_PID_FILE="$APP_DIR/data/launcher.pid"
 FLAG_FILE="/tmp/spotify-remote.framework-stopped"
 MODE="$1"
+FRAMEWORK_WAS_STOPPED=0
+APP_STARTED=0
+APP_PID=""
+WAIT_STATUS=0
+CLEANED_UP=0
 
 mkdir -p "$APP_DIR/data" "$APP_DIR/logs"
 
@@ -28,23 +33,31 @@ framework_ctl() {
 stop_framework() {
   log "Stopping Kindle framework after launcher detach"
   touch "$FLAG_FILE"
+  FRAMEWORK_WAS_STOPPED=1
   lipc-set-prop com.lab126.powerd preventScreenSaver 1 >/dev/null 2>&1 || true
   framework_ctl stop || true
   sleep 2
 }
 
 start_framework() {
-  if [ -f "$FLAG_FILE" ]; then
+  if [ "$FRAMEWORK_WAS_STOPPED" = "1" ] && [ -f "$FLAG_FILE" ]; then
     log "Restarting Kindle framework"
     rm -f "$FLAG_FILE"
+    FRAMEWORK_WAS_STOPPED=0
     framework_ctl start || true
     lipc-set-prop com.lab126.powerd preventScreenSaver 0 >/dev/null 2>&1 || true
   fi
 }
 
 cleanup() {
+  if [ "$CLEANED_UP" = "1" ]; then
+    return
+  fi
+  CLEANED_UP=1
   rm -f "$PID_FILE" "$LAUNCHER_PID_FILE"
-  start_framework
+  if [ "$APP_STARTED" = "1" ] || [ "$FRAMEWORK_WAS_STOPPED" = "1" ]; then
+    start_framework
+  fi
 }
 
 trap cleanup EXIT INT TERM HUP
@@ -72,8 +85,9 @@ else
   "$BIN" >> "$LOG_FILE" 2>&1 &
 fi
 APP_PID="$!"
+APP_STARTED=1
 echo "$APP_PID" > "$PID_FILE"
 wait "$APP_PID"
-STATUS="$?"
-log "Native Spotify Remote exited with status $STATUS"
-exit "$STATUS"
+WAIT_STATUS="$?"
+log "Native Spotify Remote exited with status $WAIT_STATUS"
+exit "$WAIT_STATUS"

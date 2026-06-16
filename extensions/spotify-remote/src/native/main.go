@@ -110,6 +110,15 @@ type uiButton struct {
 	Do    func()
 }
 
+type uiTouchZone struct {
+	Action string
+	Label  string
+	X1     int
+	Y1     int
+	X2     int
+	Y2     int
+}
+
 type app struct {
 	base       string
 	cfg        config
@@ -258,7 +267,8 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkText(4, 27, progress+"          "+duration)
 	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
 	a.fbinkText(3, 39, "VOL "+volume+"  SHUF "+shuffle+"  REP "+repeat)
-	a.fbinkText(2, -2, "Bottom tap quits. Refresh 8s.")
+	a.fbinkText(2, -4, "Refresh 8s. Quit only in lower-right.")
+	a.fbinkText(3, 34, "QUIT")
 	log.Printf("FBInk UI drawn: %s / %s", title, artist)
 }
 
@@ -442,28 +452,33 @@ func (a *app) readGrabbedTouch(f *os.File, out chan<- string, done <-chan struct
 
 func (a *app) queueUIAction(out chan<- string, rawX, rawY int, cal touchCalibration) {
 	nx, ny := a.normalizeTouch(rawX, rawY, cal)
-	log.Printf("UI tap raw=(%d,%d) normalized=(%d,%d) calibration=%s", rawX, rawY, nx, ny, cal.Source)
-	action := "playpause"
-	if ny > 1250 {
-		action = "quit"
-	} else if ny > 850 {
-		if nx < 360 {
-			action = "prev"
-		} else if nx > 720 {
-			action = "next"
-		} else {
-			action = "playpause"
+	action := ""
+	label := "empty"
+	for _, zone := range a.fbinkTouchZones() {
+		if nx >= zone.X1 && nx <= zone.X2 && ny >= zone.Y1 && ny <= zone.Y2 {
+			action = zone.Action
+			label = zone.Label
+			break
 		}
-	} else if ny > 650 {
-		if nx < 536 {
-			action = "voldown"
-		} else {
-			action = "volup"
-		}
+	}
+	log.Printf("UI tap raw=(%d,%d) normalized=(%d,%d) calibration=%s hit=%s action=%s", rawX, rawY, nx, ny, cal.Source, label, action)
+	if action == "" {
+		return
 	}
 	select {
 	case out <- action:
 	default:
+	}
+}
+
+func (a *app) fbinkTouchZones() []uiTouchZone {
+	return []uiTouchZone{
+		{Action: "voldown", Label: "vol-down", X1: 120, Y1: 1110, X2: 610, Y2: 1235},
+		{Action: "volup", Label: "vol-up", X1: 626, Y1: 1110, X2: 1116, Y2: 1235},
+		{Action: "prev", Label: "prev", X1: 150, Y1: 1260, X2: 355, Y2: 1455},
+		{Action: "playpause", Label: "playpause", X1: 438, Y1: 1235, X2: 796, Y2: 1480},
+		{Action: "next", Label: "next", X1: 880, Y1: 1260, X2: 1085, Y2: 1455},
+		{Action: "quit", Label: "quit-corner", X1: 980, Y1: 1490, X2: 1236, Y2: 1648},
 	}
 }
 
