@@ -232,6 +232,7 @@ func (a *app) drawFBInkNowPlaying() {
 	title := "Spotify Remote"
 	artist := "No active Spotify device"
 	albumName := "Start Spotify on phone or PC"
+	state := "NEEDS ATTENTION"
 	progress := "0:00"
 	duration := "0:00"
 	volume := "?"
@@ -255,30 +256,34 @@ func (a *app) drawFBInkNowPlaying() {
 		repeat = p.Repeat
 		coverPath = a.prepareCover(p.CurrentTrack.Album.Images)
 		if p.IsPlaying {
+			state = "NOW PLAYING"
 			playIcon = "PAUSE"
+		} else {
+			state = "PAUSED"
 		}
 	}
 
 	a.fbinkClear()
 	time.Sleep(250 * time.Millisecond)
-	a.fbinkText(4, 0, "SPOTIFY REMOTE")
+	a.fbinkText(4, 1, "SPOTIFY REMOTE")
 	if coverPath != "" {
 		a.fbinkImage(coverPath)
 	} else {
-		a.fbinkText(5, 4, "+======================+")
-		a.fbinkText(5, 5, "|                      |")
-		a.fbinkText(5, 6, "|     ALBUM COVER      |")
-		a.fbinkText(5, 7, "|                      |")
-		a.fbinkText(5, 8, "+======================+")
+		a.fbinkText(4, 4, "+====================+")
+		a.fbinkText(4, 5, "|                    |")
+		a.fbinkText(4, 6, "|    ALBUM COVER     |")
+		a.fbinkText(4, 7, "|                    |")
+		a.fbinkText(4, 8, "+====================+")
 	}
-	a.fbinkText(4, 27, "====================")
+	a.fbinkText(4, 25, "====================")
 	a.fbinkText(2, -4, "Refresh 8s. Quit only in lower-right.")
-	a.fbinkText(4, 15, safe(artist, 28))
-	a.fbinkText(7, 17, safe(title, 16))
-	a.fbinkText(4, 20, safe(albumName, 28))
-	a.fbinkText(4, 29, progress+"          "+duration)
-	a.fbinkText(3, 33, "VOL "+volume+"  SHUF "+shuffle+"  REP "+repeat)
-	a.fbinkText(6, 39, "|<   "+playIcon+"   >|")
+	a.fbinkText(4, 11, state)
+	a.fbinkText(6, 13, safe(title, 18))
+	a.fbinkText(4, 18, safe(artist, 24))
+	a.fbinkText(4, 21, safe(albumName, 24))
+	a.fbinkText(4, 27, progress+"          "+duration)
+	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
+	a.fbinkText(3, 39, "VOL "+volume+"  SHUF "+shuffle+"  REP "+repeat)
 	log.Printf("FBInk UI drawn: %s / %s", title, artist)
 }
 
@@ -308,9 +313,9 @@ func (a *app) fbinkText(size, row int, text string) {
 func (a *app) fbinkImage(path string) {
 	if p := a.fbinkPath(); p != "" {
 		attempts := [][]string{
-			{"-q", "-g", fmt.Sprintf("file=%s,x=318,y=70,w=600,h=600,dither,flatten", path)},
-			{"-q", "-g", fmt.Sprintf("file=%s,x=318,y=70,w=600,h=600,dither", path)},
-			{"-q", "-g", fmt.Sprintf("file=%s,x=318,y=70", path)},
+			{"-q", "-g", fmt.Sprintf("file=%s,x=388,y=95,w=460,h=460,dither,flatten", path)},
+			{"-q", "-g", fmt.Sprintf("file=%s,x=388,y=95,w=460,h=460,dither", path)},
+			{"-q", "-g", fmt.Sprintf("file=%s,x=388,y=95", path)},
 		}
 		for i, args := range attempts {
 			cmd := exec.Command(p, args...)
