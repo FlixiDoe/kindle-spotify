@@ -4,8 +4,8 @@
   "port": 8787,
   "refresh_seconds": 8,
   "show_cover": true,
-  "screen_width": 1236,
-  "screen_height": 1648,
+  "screen_width": 0,
+  "screen_height": 0,
   "touch_min_x": 0,
   "touch_max_x": 4095,
   "touch_min_y": 0,
@@ -14,9 +14,9 @@
   "touch_invert_x": false,
   "touch_invert_y": false,
   "touch_use_kernel_abs": true,
-  "eips_col_width": 22,
-  "eips_row_height": 40,
-  "button_top": 660,
-  "button_height": 88,
-  "button_gap": 2
+  "eips_col_width": 0,
+  "eips_row_height": 0,
+  "button_top": 0,
+  "button_height": 0,
+  "button_gap": 0
 }

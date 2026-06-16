@@ -21,16 +21,16 @@ This is an independent hobby project and is not affiliated with, endorsed by, sp
 
 ## Target Devices
 
-The current native layout is tuned for Kindle Paperwhite 11th generation / PW5 style devices.
+The native layout is based on Kindle Paperwhite 11th generation / PW5 proportions, but it can now scale to other Kindle framebuffer sizes.
 
 Current native assumptions:
 
-- Display: `1236x1648`
+- Display: auto-detected from `/sys/class/graphics/fb0/virtual_size`, with `1236x1648` as the PW5 fallback
 - Touch raw range: `0..4095`
 - Renderer: Kindle `eips`
 - Extension path on device: `/mnt/us/extensions/spotify-remote`
 
-Other Kindle models may need layout or touch-coordinate calibration in `extensions/spotify-remote/src/native/main.go`.
+Other Kindle models may still need touch-coordinate calibration in `data/config.json`.
 
 ## Architecture Notes
 
@@ -101,8 +101,8 @@ http://127.0.0.1:8787/callback
   "port": 8787,
   "refresh_seconds": 8,
   "show_cover": true,
-  "screen_width": 1236,
-  "screen_height": 1648,
+  "screen_width": 0,
+  "screen_height": 0,
   "touch_min_x": 0,
   "touch_max_x": 4095,
   "touch_min_y": 0,
@@ -111,17 +111,19 @@ http://127.0.0.1:8787/callback
   "touch_invert_x": false,
   "touch_invert_y": false,
   "touch_use_kernel_abs": true,
-  "eips_col_width": 22,
-  "eips_row_height": 40,
-  "button_top": 660,
-  "button_height": 88,
-  "button_gap": 2
+  "eips_col_width": 0,
+  "eips_row_height": 0,
+  "button_top": 0,
+  "button_height": 0,
+  "button_gap": 0
 }
 ```
 
 Replace only `client_id` with your own Spotify app Client ID. Do not use or store a Spotify Client Secret on the Kindle. This project uses PKCE because the Kindle storage should be treated as user-accessible.
 
 `data/config.json` is intentionally ignored by Git. Public releases include `data/config.example.json` only, so every user can add their own Spotify app data locally.
+
+For layout fields, `0` means auto-detect or auto-scale. The app reads the framebuffer size on the Kindle and scales the cover, text rows, and touch hitboxes from the PW5 reference layout.
 
 ## Build
 
@@ -235,26 +237,28 @@ Check Kindle Wi-Fi, DNS filtering, router firewall rules, captive portals, and a
 
 Native UI does not respond to touch
 
-Make sure you started `Now Playing Display`. The native UI prints the latest touch result as `Tap ... raw=x,y xy=x,y` or `Miss ... raw=x,y xy=x,y`. By default the app reads the touchscreen's kernel ABS min/max values from `/dev/input/event*`; this avoids assuming every Kindle uses `0..4095` raw touch coordinates. If normalized `xy` is still wrong, set `"touch_use_kernel_abs": false` and adjust `touch_min_*`, `touch_max_*`, `touch_swap_xy`, or `touch_invert_*` in `data/config.json`. If the UI rows are visually too high or too low, adjust `eips_row_height`, `button_top`, `button_height`, and `button_gap`.
+Make sure you started `Now Playing Display`. The native UI prints the latest touch result as `Tap ... raw=x,y xy=x,y` or `Miss ... raw=x,y xy=x,y`. By default the app reads the touchscreen's kernel ABS min/max values from `/dev/input/event*`; this avoids assuming every Kindle uses `0..4095` raw touch coordinates. If normalized `xy` is still wrong, set `"touch_use_kernel_abs": false` and adjust `touch_min_*`, `touch_max_*`, `touch_swap_xy`, or `touch_invert_*` in `data/config.json`.
 
-Default Paperwhite 11/PW5 calibration:
+Auto layout config:
 
 ```json
 {
-  "screen_width": 1236,
-  "screen_height": 1648,
+  "screen_width": 0,
+  "screen_height": 0,
   "touch_min_x": 0,
   "touch_max_x": 4095,
   "touch_min_y": 0,
   "touch_max_y": 4095,
   "touch_use_kernel_abs": true,
-  "eips_col_width": 22,
-  "eips_row_height": 40,
-  "button_top": 660,
-  "button_height": 88,
-  "button_gap": 2
+  "eips_col_width": 0,
+  "eips_row_height": 0,
+  "button_top": 0,
+  "button_height": 0,
+  "button_gap": 0
 }
 ```
+
+Set explicit values only if a specific Kindle model needs manual calibration.
 
 Kindle UI does not return
 

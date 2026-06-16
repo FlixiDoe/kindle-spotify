@@ -26,6 +26,8 @@ import (
 const (
 	scopes                     = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
 	placeholderSpotifyClientID = "PASTE_SPOTIFY_CLIENT_ID_HERE"
+	baseScreenWidth            = 1236
+	baseScreenHeight           = 1648
 )
 
 type config struct {
@@ -264,24 +266,24 @@ func (a *app) drawFBInkNowPlaying() {
 
 	a.fbinkClear()
 	time.Sleep(250 * time.Millisecond)
-	a.fbinkText(4, 1, "SPOTIFY REMOTE")
+	a.fbinkText(4, a.layoutRow(1), "SPOTIFY REMOTE")
 	if coverPath != "" {
 		a.fbinkImage(coverPath)
 	} else {
-		a.fbinkText(4, 4, "+====================+")
-		a.fbinkText(4, 5, "|                    |")
-		a.fbinkText(4, 6, "|    ALBUM COVER     |")
-		a.fbinkText(4, 7, "|                    |")
-		a.fbinkText(4, 8, "+====================+")
+		a.fbinkText(4, a.layoutRow(4), "+====================+")
+		a.fbinkText(4, a.layoutRow(5), "|                    |")
+		a.fbinkText(4, a.layoutRow(6), "|    ALBUM COVER     |")
+		a.fbinkText(4, a.layoutRow(7), "|                    |")
+		a.fbinkText(4, a.layoutRow(8), "+====================+")
 	}
-	a.fbinkText(4, 25, "====================")
+	a.fbinkText(4, a.layoutRow(25), "====================")
 	a.fbinkText(2, -4, "Refresh 8s. Quit only in lower-right.")
-	a.fbinkText(6, 13, safe(title, 18))
-	a.fbinkText(4, 18, safe(artist, 24))
-	a.fbinkText(4, 21, safe(albumName, 24))
-	a.fbinkText(4, 27, progress+"          "+duration)
-	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
-	a.fbinkText(3, 39, "VOL "+volume+"  SHUF "+shuffle+"  REP "+repeat)
+	a.fbinkText(6, a.layoutRow(13), safe(title, 18))
+	a.fbinkText(4, a.layoutRow(18), safe(artist, 24))
+	a.fbinkText(4, a.layoutRow(21), safe(albumName, 24))
+	a.fbinkText(4, a.layoutRow(27), progress+"          "+duration)
+	a.fbinkText(5, a.layoutRow(31), "|<   "+playIcon+"   >|")
+	a.fbinkText(3, a.layoutRow(39), "VOL "+volume+"  SHUF "+shuffle+"  REP "+repeat)
 	log.Printf("FBInk UI drawn: %s / %s", title, artist)
 }
 
@@ -310,10 +312,13 @@ func (a *app) fbinkText(size, row int, text string) {
 
 func (a *app) fbinkImage(path string) {
 	if p := a.fbinkPath(); p != "" {
+		x := a.scaleX(388)
+		y := a.scaleY(95)
+		size := min(a.scaleX(460), a.scaleY(460))
 		attempts := [][]string{
-			{"-q", "-g", fmt.Sprintf("file=%s,x=388,y=95,w=460,h=460,dither,flatten", path)},
-			{"-q", "-g", fmt.Sprintf("file=%s,x=388,y=95,w=460,h=460,dither", path)},
-			{"-q", "-g", fmt.Sprintf("file=%s,x=388,y=95", path)},
+			{"-q", "-g", fmt.Sprintf("file=%s,x=%d,y=%d,w=%d,h=%d,dither,flatten", path, x, y, size, size)},
+			{"-q", "-g", fmt.Sprintf("file=%s,x=%d,y=%d,w=%d,h=%d,dither", path, x, y, size, size)},
+			{"-q", "-g", fmt.Sprintf("file=%s,x=%d,y=%d", path, x, y)},
 		}
 		for i, args := range attempts {
 			cmd := exec.Command(p, args...)
@@ -508,13 +513,23 @@ func (a *app) queueUIAction(out chan<- string, rawX, rawY int, cal touchCalibrat
 }
 
 func (a *app) fbinkTouchZones() []uiTouchZone {
+	zone := func(action, label string, x1, y1, x2, y2 int) uiTouchZone {
+		return uiTouchZone{
+			Action: action,
+			Label:  label,
+			X1:     a.scaleX(x1),
+			Y1:     a.scaleY(y1),
+			X2:     a.scaleX(x2),
+			Y2:     a.scaleY(y2),
+		}
+	}
 	return []uiTouchZone{
-		{Action: "voldown", Label: "vol-down", X1: 120, Y1: 1110, X2: 610, Y2: 1235},
-		{Action: "volup", Label: "vol-up", X1: 626, Y1: 1110, X2: 1116, Y2: 1235},
-		{Action: "prev", Label: "prev", X1: 0, Y1: 1190, X2: 420, Y2: 1590},
-		{Action: "playpause", Label: "playpause", X1: 438, Y1: 1235, X2: 796, Y2: 1480},
-		{Action: "next", Label: "next", X1: 820, Y1: 1210, X2: 1115, Y2: 1590},
-		{Action: "quit", Label: "quit-corner", X1: 980, Y1: 1490, X2: 1236, Y2: 1648},
+		zone("voldown", "vol-down", 120, 1110, 610, 1235),
+		zone("volup", "vol-up", 626, 1110, 1116, 1235),
+		zone("prev", "prev", 0, 1190, 420, 1590),
+		zone("playpause", "playpause", 438, 1235, 796, 1480),
+		zone("next", "next", 820, 1210, 1115, 1590),
+		zone("quit", "quit-corner", 980, 1490, baseScreenWidth, baseScreenHeight),
 	}
 }
 
@@ -856,6 +871,20 @@ func detectBaseDir() string {
 	return "."
 }
 
+func detectScreenSize() (int, int) {
+	if raw, err := os.ReadFile("/sys/class/graphics/fb0/virtual_size"); err == nil {
+		parts := strings.Split(strings.TrimSpace(string(raw)), ",")
+		if len(parts) == 2 {
+			w, wErr := strconv.Atoi(strings.TrimSpace(parts[0]))
+			h, hErr := strconv.Atoi(strings.TrimSpace(parts[1]))
+			if wErr == nil && hErr == nil && w > 0 && h > 0 {
+				return w, h
+			}
+		}
+	}
+	return baseScreenWidth, baseScreenHeight
+}
+
 func (a *app) setupLog() {
 	p := filepath.Join(a.base, "logs", "spotify-remote.log")
 	_ = os.MkdirAll(filepath.Dir(p), 0755)
@@ -881,27 +910,29 @@ func (a *app) loadConfig() error {
 }
 
 func defaultConfig() config {
+	width, height := detectScreenSize()
 	return config{
 		ClientID:          placeholderSpotifyClientID,
 		Redirect:          "http://127.0.0.1:8787/callback",
 		Port:              8787,
 		RefreshSec:        8,
-		ScreenWidth:       1236,
-		ScreenHeight:      1648,
+		ScreenWidth:       width,
+		ScreenHeight:      height,
 		TouchMinX:         0,
 		TouchMaxX:         4095,
 		TouchMinY:         0,
 		TouchMaxY:         4095,
 		TouchUseKernelAbs: boolPtr(true),
-		EipsColWidth:      22,
-		EipsRowHeight:     40,
-		ButtonTop:         660,
-		ButtonHeight:      88,
+		EipsColWidth:      max(width/56, 12),
+		EipsRowHeight:     max(height/41, 24),
+		ButtonTop:         height * 2 / 5,
+		ButtonHeight:      max(height/19, 64),
 		ButtonGap:         2,
 	}
 }
 
 func (a *app) normalizeConfig() {
+	width, height := detectScreenSize()
 	if a.cfg.Redirect == "" {
 		a.cfg.Redirect = "http://127.0.0.1:8787/callback"
 	}
@@ -912,10 +943,10 @@ func (a *app) normalizeConfig() {
 		a.cfg.RefreshSec = 8
 	}
 	if a.cfg.ScreenWidth == 0 {
-		a.cfg.ScreenWidth = 1236
+		a.cfg.ScreenWidth = width
 	}
 	if a.cfg.ScreenHeight == 0 {
-		a.cfg.ScreenHeight = 1648
+		a.cfg.ScreenHeight = height
 	}
 	if a.cfg.TouchMaxX <= a.cfg.TouchMinX {
 		a.cfg.TouchMinX = 0
@@ -926,16 +957,16 @@ func (a *app) normalizeConfig() {
 		a.cfg.TouchMaxY = 4095
 	}
 	if a.cfg.EipsColWidth == 0 {
-		a.cfg.EipsColWidth = 22
+		a.cfg.EipsColWidth = max(a.cfg.ScreenWidth/56, 12)
 	}
 	if a.cfg.EipsRowHeight == 0 {
-		a.cfg.EipsRowHeight = 40
+		a.cfg.EipsRowHeight = max(a.cfg.ScreenHeight/41, 24)
 	}
 	if a.cfg.ButtonTop == 0 {
-		a.cfg.ButtonTop = 660
+		a.cfg.ButtonTop = a.cfg.ScreenHeight * 2 / 5
 	}
 	if a.cfg.ButtonHeight == 0 {
-		a.cfg.ButtonHeight = 88
+		a.cfg.ButtonHeight = max(a.cfg.ScreenHeight/19, 64)
 	}
 	if a.cfg.ButtonGap == 0 {
 		a.cfg.ButtonGap = 2
@@ -1612,6 +1643,22 @@ func (a *app) rowToY(row int) int {
 	return row * a.cfg.EipsRowHeight
 }
 
+func (a *app) scaleX(v int) int {
+	return v * a.cfg.ScreenWidth / baseScreenWidth
+}
+
+func (a *app) scaleY(v int) int {
+	return v * a.cfg.ScreenHeight / baseScreenHeight
+}
+
+func (a *app) layoutRow(row int) int {
+	scaled := row * a.cfg.ScreenHeight / baseScreenHeight
+	if row > 0 && scaled < 1 {
+		return 1
+	}
+	return scaled
+}
+
 func clamp(v, lo, hi int) int {
 	if v < lo {
 		return lo
@@ -1624,6 +1671,13 @@ func clamp(v, lo, hi int) int {
 
 func max(a, b int) int {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func min(a, b int) int {
+	if a < b {
 		return a
 	}
 	return b

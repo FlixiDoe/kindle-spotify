@@ -63,10 +63,10 @@ Die lauffaehige Extension ist fuer den Pfad auf dem Kindle gebaut:
 /mnt/us/extensions/spotify-remote
 ```
 
-Der Ziel-Kindle ist ein Paperwhite 11. Generation. Die native App nimmt aktuell die Paperwhite-11/PW5-Anzeige als Grundlage und verwendet:
+Der Ziel-Kindle fuer die erste echte Hardwarevalidierung war ein Paperwhite 11. Generation. Die native App nimmt die Paperwhite-11/PW5-Anzeige als Referenzlayout, skaliert aber inzwischen Cover, Textzeilen und Touch-Hitboxen anhand der erkannten Framebuffer-Groesse.
 
-- Bildschirmbreite: `1236`
-- Bildschirmhoehe: `1648`
+- Bildschirmbreite: automatisch ueber `/sys/class/graphics/fb0/virtual_size`, Fallback `1236`
+- Bildschirmhoehe: automatisch ueber `/sys/class/graphics/fb0/virtual_size`, Fallback `1648`
 - Touch-Rohbereich: `0..4095`
 - eips-Zeilenraster: ca. `40 px` pro Zeile
 - eips-Spaltenraster: ca. `22 px` pro Spalte
@@ -77,8 +77,8 @@ Die Werte koennen inzwischen ueber `extensions/spotify-remote/data/config.json` 
 
 ```json
 {
-  "screen_width": 1236,
-  "screen_height": 1648,
+  "screen_width": 0,
+  "screen_height": 0,
   "touch_min_x": 0,
   "touch_max_x": 4095,
   "touch_min_y": 0,
@@ -87,13 +87,15 @@ Die Werte koennen inzwischen ueber `extensions/spotify-remote/data/config.json` 
   "touch_invert_x": false,
   "touch_invert_y": false,
   "touch_use_kernel_abs": true,
-  "eips_col_width": 22,
-  "eips_row_height": 40,
-  "button_top": 660,
-  "button_height": 88,
-  "button_gap": 2
+  "eips_col_width": 0,
+  "eips_row_height": 0,
+  "button_top": 0,
+  "button_height": 0,
+  "button_gap": 0
 }
 ```
+
+Bei Layoutwerten bedeutet `0`: automatisch erkennen oder aus der Bildschirmgroesse ableiten. Explizite Werte sind nur fuer manuelle Geraetekalibrierung gedacht.
 
 Der wichtigste Fix fuer die Touch-Steuerung: Die App liest standardmaessig die echten ABS-Min/Max-Werte des jeweiligen `/dev/input/event*` per Kernel-`EVIOCGABS` aus. Dadurch funktioniert sie sowohl mit Touchcontrollern, die rohe Werte wie `0..4095` liefern, als auch mit Kindle/Firmware-Kombinationen, die bereits niedrigere Bildschirm- oder Framebuffer-nahe Koordinaten melden. Wenn die Kernelwerte auf einem Modell falsch sind, kann `"touch_use_kernel_abs": false` gesetzt werden; dann werden wieder `touch_min_*` und `touch_max_*` aus `data/config.json` verwendet.
 
