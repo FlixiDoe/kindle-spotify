@@ -72,7 +72,12 @@ cleanup() {
   fi
 }
 
-trap cleanup EXIT INT TERM HUP
+ignore_runtime_signal() {
+  log "Ignoring runtime signal while native UI owns the screen"
+}
+
+trap cleanup EXIT INT
+trap ignore_runtime_signal TERM HUP
 
 sleep 3
 

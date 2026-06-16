@@ -134,6 +134,7 @@ type app struct {
 	lastAction time.Time
 	lastTap    string
 	lastFBInkLayoutKey string
+	fbinkTextCache map[string]string
 	quit       chan struct{}
 }
 
@@ -314,10 +315,19 @@ func (a *app) fbinkClear() {
 		_ = exec.Command(p, "-q", "-k").Run()
 	}
 	eipsClear()
+	a.fbinkTextCache = make(map[string]string)
 }
 
 func (a *app) fbinkText(size, row int, text string) {
 	if p := a.fbinkPath(); p != "" {
+		if a.fbinkTextCache == nil {
+			a.fbinkTextCache = make(map[string]string)
+		}
+		key := strconv.Itoa(size) + ":" + strconv.Itoa(row)
+		if a.fbinkTextCache[key] == text {
+			return
+		}
+		a.fbinkTextCache[key] = text
 		_ = exec.Command(p, "-q", "-S", strconv.Itoa(size), "-m", "-y", strconv.Itoa(row), text).Run()
 	}
 }
