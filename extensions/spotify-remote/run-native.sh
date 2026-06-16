@@ -1,6 +1,7 @@
 #!/bin/sh
 APP_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN="$APP_DIR/bin/spotify-remote-arm"
+BIN_NEW="$APP_DIR/bin/spotify-remote-arm.new"
 LOG_FILE="$APP_DIR/logs/spotify-remote.log"
 PID_FILE="$APP_DIR/data/spotify-remote.pid"
 LAUNCHER_PID_FILE="$APP_DIR/data/launcher.pid"
@@ -11,6 +12,10 @@ APP_STARTED=0
 APP_PID=""
 WAIT_STATUS=0
 CLEANED_UP=0
+
+if [ -x "$BIN_NEW" ]; then
+  BIN="$BIN_NEW"
+fi
 
 mkdir -p "$APP_DIR/data" "$APP_DIR/logs"
 
