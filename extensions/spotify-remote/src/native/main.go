@@ -9,9 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"image"
-	_ "image/jpeg"
-	"image/png"
 	"io"
 	"log"
 	"net/http"
@@ -334,48 +331,22 @@ func (a *app) prepareCover(images []albumImage) string {
 		log.Printf("cover download bad status: %d", resp.StatusCode)
 		return ""
 	}
-	rawCoverPath := filepath.Join(a.base, "data", "cover-source.jpg")
-	f, err := os.Create(rawCoverPath)
+	coverPath := filepath.Join(a.base, "data", "cover.jpg")
+	f, err := os.Create(coverPath)
 	if err != nil {
 		log.Printf("cover create failed: %v", err)
 		return ""
 	}
-	defer f.Close()
 	if _, err := io.Copy(f, io.LimitReader(resp.Body, 1024*1024)); err != nil {
+		_ = f.Close()
 		log.Printf("cover write failed: %v", err)
 		return ""
 	}
 	if err := f.Close(); err != nil {
 		log.Printf("cover close failed: %v", err)
-		return rawCoverPath
+		return coverPath
 	}
-	decoded, err := os.Open(rawCoverPath)
-	if err != nil {
-		log.Printf("cover reopen failed: %v", err)
-		return rawCoverPath
-	}
-	defer decoded.Close()
-	img, _, err := image.Decode(decoded)
-	if err != nil {
-		log.Printf("cover decode failed, using raw jpeg: %v", err)
-		return rawCoverPath
-	}
-	coverPath := filepath.Join(a.base, "data", "cover.png")
-	pngFile, err := os.Create(coverPath)
-	if err != nil {
-		log.Printf("cover png create failed: %v", err)
-		return rawCoverPath
-	}
-	if err := png.Encode(pngFile, img); err != nil {
-		_ = pngFile.Close()
-		log.Printf("cover png encode failed: %v", err)
-		return rawCoverPath
-	}
-	if err := pngFile.Close(); err != nil {
-		log.Printf("cover png close failed: %v", err)
-		return rawCoverPath
-	}
-	log.Printf("cover prepared: %s (%dx%d)", coverPath, img.Bounds().Dx(), img.Bounds().Dy())
+	log.Printf("cover prepared: %s", coverPath)
 	return coverPath
 }
 
@@ -515,7 +486,7 @@ func (a *app) fbinkTouchZones() []uiTouchZone {
 	return []uiTouchZone{
 		{Action: "voldown", Label: "vol-down", X1: 120, Y1: 1110, X2: 610, Y2: 1235},
 		{Action: "volup", Label: "vol-up", X1: 626, Y1: 1110, X2: 1116, Y2: 1235},
-		{Action: "prev", Label: "prev", X1: 0, Y1: 1210, X2: 320, Y2: 1590},
+		{Action: "prev", Label: "prev", X1: 0, Y1: 1190, X2: 420, Y2: 1590},
 		{Action: "playpause", Label: "playpause", X1: 438, Y1: 1235, X2: 796, Y2: 1480},
 		{Action: "next", Label: "next", X1: 820, Y1: 1210, X2: 1115, Y2: 1590},
 		{Action: "quit", Label: "quit-corner", X1: 980, Y1: 1490, X2: 1236, Y2: 1648},
