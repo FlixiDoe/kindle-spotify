@@ -9,6 +9,17 @@ log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG_FILE"
 }
 
+start_framework() {
+  if command -v start >/dev/null 2>&1; then
+    start framework >> "$LOG_FILE" 2>&1 && return 0
+  fi
+  if [ -x /etc/init.d/framework ]; then
+    /etc/init.d/framework start >> "$LOG_FILE" 2>&1 && return 0
+  fi
+  log "No framework start command available"
+  return 1
+}
+
 if [ ! -f "$PID_FILE" ]; then
   log "Stop requested, no PID file present"
   if [ -f "$APP_DIR/data/launcher.pid" ]; then
@@ -26,8 +37,7 @@ if [ ! -f "$PID_FILE" ]; then
   if [ -f /tmp/spotify-remote.framework-stopped ]; then
     log "Restarting framework after stop request"
     rm -f /tmp/spotify-remote.framework-stopped
-    /etc/init.d/framework start >> "$LOG_FILE" 2>&1 || true
-    start framework >> "$LOG_FILE" 2>&1 || true
+    start_framework || true
     lipc-set-prop com.lab126.powerd preventScreenSaver 0 >/dev/null 2>&1 || true
   fi
   exit 0
@@ -55,8 +65,7 @@ rm -f "$PID_FILE"
 if [ -f /tmp/spotify-remote.framework-stopped ]; then
   log "Restarting framework after stop request"
   rm -f /tmp/spotify-remote.framework-stopped
-  /etc/init.d/framework start >> "$LOG_FILE" 2>&1 || true
-  start framework >> "$LOG_FILE" 2>&1 || true
+  start_framework || true
   lipc-set-prop com.lab126.powerd preventScreenSaver 0 >/dev/null 2>&1 || true
 fi
 exit 0

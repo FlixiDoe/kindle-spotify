@@ -12,12 +12,23 @@ log() {
   echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG_FILE"
 }
 
+framework_ctl() {
+  ACTION="$1"
+  if command -v "$ACTION" >/dev/null 2>&1; then
+    "$ACTION" framework >> "$LOG_FILE" 2>&1 && return 0
+  fi
+  if [ -x /etc/init.d/framework ]; then
+    /etc/init.d/framework "$ACTION" >> "$LOG_FILE" 2>&1 && return 0
+  fi
+  log "No framework $ACTION command available"
+  return 1
+}
+
 stop_framework() {
   log "Stopping Kindle framework after launcher detach"
   touch "$FLAG_FILE"
   lipc-set-prop com.lab126.powerd preventScreenSaver 1 >/dev/null 2>&1 || true
-  /etc/init.d/framework stop >> "$LOG_FILE" 2>&1 || true
-  stop framework >> "$LOG_FILE" 2>&1 || true
+  framework_ctl stop || true
   sleep 2
 }
 
@@ -25,8 +36,7 @@ start_framework() {
   if [ -f "$FLAG_FILE" ]; then
     log "Restarting Kindle framework"
     rm -f "$FLAG_FILE"
-    /etc/init.d/framework start >> "$LOG_FILE" 2>&1 || true
-    start framework >> "$LOG_FILE" 2>&1 || true
+    framework_ctl start || true
     lipc-set-prop com.lab126.powerd preventScreenSaver 0 >/dev/null 2>&1 || true
   fi
 }

@@ -174,6 +174,16 @@ Das ist fuer die Spotify-Remote angemessen. Weitere LIPC-Nutzung sollte nur hinz
 
 Die aktive Touch-App darf alle paar Sekunden Spotify abfragen, weil sie eine Vordergrund-App ist. Die passive Anzeige sollte dagegen sparsam bleiben. Ein dauerhaftes Now-Playing-Dashboard sollte langfristig nicht mit engen `sleep`-Pollingzyklen laufen, sondern mit laengeren Intervallen, manueller Aktualisierung oder einem RTC-Wakeup-Design.
 
+### Framework Start/Stop auf PW5
+
+Auf neueren Kindle-5.x-Firmwares, inklusive PW5-Klasse, ist `start framework` / `stop framework` der primaere Upstart-Pfad. Aeltere Anleitungen und manche Erweiterungen referenzieren noch `/etc/init.d/framework`; die bisherigen Crashlogs zeigten aber, dass dieser Pfad auf dem getesteten Geraet nicht existiert.
+
+Projektregel:
+
+- `run-native.sh` verwendet zuerst `stop framework` und faellt nur auf `/etc/init.d/framework stop` zurueck, wenn die Datei existiert und ausfuehrbar ist.
+- `run-native.sh`, `stop.sh` und `recover.sh` verwenden fuer Recovery zuerst `start framework`.
+- Fehlendes `/etc/init.d/framework` ist auf PW5 kein App-Fehler, solange `start framework` / `stop framework` funktioniert.
+
 ### E-Ink-Rendering: eips und fbink
 
 Der Research empfiehlt `fbink` als robustere Framebuffer-Schicht fuer E-Ink. Dieses Projekt nutzt derzeit zwei Wege:
@@ -276,6 +286,12 @@ Fuer dieses Projekt bedeutet das:
 
 Quelle: `https://kindlemodding.org/jailbreaking/post-jailbreak/installing-kual-mrpi/`
 
+Weitere relevante KindleModding-Startpunkte:
+
+- `https://kindlemodding.org/kindle-dev/`
+- `https://kindlemodding.org/kindle-dev/kindle-sdk.html`
+- `https://kindlemodding.org/jailbreak-faq.html`
+
 ### KUAL Booklet README
 
 Das KUAL-Booklet-README von NiLuJe bestaetigt, dass KUAL als Launcher fuer viele Kindle-Generationen gepflegt wird, inklusive PW5-Klasse. Es ist damit die richtige Laufzeitannahme fuer diese App, solange der Kindle bereits jailbroken ist und KUAL funktioniert.
@@ -305,6 +321,19 @@ Projektableitung:
 - Wenn die App spaeter als KOReader-Plugin gedacht wird, waere die Struktur `plugin.koplugin/_meta.lua` und `main.lua` ein separater Architekturpfad.
 
 Quelle: `https://koreader.rocks/doc/topics/Development_guide.md.html`
+
+### Renderer-, LIPC- und Input-Referenzen
+
+Die folgenden Referenzen sind direkt an konkrete Dateien im Projekt gekoppelt:
+
+- `https://wiki.mobileread.com/wiki/Eips`: Referenz fuer `eips -c` und `eips row col text` in `src/native/main.go`, `launch.sh`, `recover.sh` und Fehleranzeigen.
+- `https://github.com/NiLuJe/FBInk`: Referenz fuer den geplanten besseren E-Ink-Renderer im `nowplaying.sh`-Pfad.
+- `https://www.mobileread.com/forums/showthread.php?t=299620`: MobileRead-Thread zu FBInk und Kindle-spezifischen Details.
+- `https://wiki.mobileread.com/wiki/Lipc`: Referenz fuer `lipc-set-prop`, `lipc-get-prop` und Services wie `com.lab126.powerd` / `com.lab126.appmgrd`.
+- `https://wiki.mobileread.com/wiki/Kindle_Touch_Hacking`: Kontext zu Kindle Touch, LIPC und Framework-Management.
+- `https://www.kernel.org/doc/Documentation/input/event-codes.txt`: Referenz fuer `EV_ABS`, `EV_KEY`, `EV_SYN`, `ABS_X/Y`, `ABS_MT_POSITION_X/Y`.
+- `https://www.kernel.org/doc/Documentation/input/multi-touch-protocol.txt`: Referenz fuer Multitouch-Release per `ABS_MT_TRACKING_ID = -1`.
+- `https://www.mobileread.com/forums/showthread.php?t=225149`: Kontext zu LIPC-Daemon und Framework-/Firmware-Unterschieden.
 
 ### KUAL-Struktur aus Referenzprojekten
 
