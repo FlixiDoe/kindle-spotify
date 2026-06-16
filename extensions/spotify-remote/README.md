@@ -1,6 +1,6 @@
 # Kindle Spotify Remote
 
-Fertige KUAL-Extension fuer einen jailbroken Kindle Paperwhite 11 / PW5 / 2021. Die App startet einen lokalen Webserver auf `127.0.0.1:8787`, speichert Spotify OAuth-PKCE-Tokens lokal und zeigt eine e-ink-freundliche Spotify-Remote im Kindle Experimental Browser.
+Fertige KUAL-Extension fuer einen jailbroken Kindle Paperwhite 11 / PW5 / 2021. Der Hauptpfad ist eine native FBInk/eips-Vollbild-App direkt auf dem Kindle. Die Browser-/Server-Remote bleibt im Projekt als Fallback fuer Setup und Entwicklung erhalten.
 
 ## Architekturentscheidung
 
@@ -100,11 +100,14 @@ Token werden in `data/token.json` gespeichert und automatisch erneuert. Wenn der
 
 ## KUAL Menue
 
+- Spotify Remote: Ordner im KUAL-Menue, damit Spotify nicht als viele einzelne Hauptlisten-Eintraege erscheint.
 - Touch Remote: startet die native Vollbild-App mit Touch-Flaechen fuer Play/Pause, Next, Previous, Lautstaerke, Shuffle, Repeat, Devices, Refresh und Login.
 - Now Playing Display: startet eine passive Vollbild-Anzeige fuer den aktuellen Titel. Diese Ansicht nimmt keine Touch- oder Texteingaben an; Steuerung laeuft weiter ueber KUAL oder Touch Remote.
 - Stop Now Playing Display: beendet die passive Anzeige.
 - Stop Spotify Remote: beendet den Server ueber PID-Datei.
 - Show Log: versucht `logs/spotify-remote.log` im Browser zu oeffnen.
+
+Der Launcher bevorzugt `bin/spotify-remote-arm.new`, falls diese Datei vorhanden und ausfuehrbar ist. Das erleichtert USB-Deployments, wenn `spotify-remote-arm` noch vom Kindle gelockt ist.
 
 ## Funktionen
 
@@ -132,6 +135,8 @@ Token werden in `data/token.json` gespeichert und automatisch erneuert. Wenn der
 Kindle Browser laedt localhost nicht: Server per `Start Spotify Remote` starten, dann `Open Spotify Remote`. Falls das automatische Oeffnen scheitert, Experimental Browser manuell auf `http://127.0.0.1:8787` setzen. Einige Kindle-Firmwares akzeptieren die `lipc` Browser-URL nicht; der Server laeuft trotzdem.
 
 Binary startet nicht: `bin/spotify-remote-arm` muss fuer Kindle ARM gebaut und ausfuehrbar sein. Bei FAT/USB-Kopien kann das Execute-Bit fehlen; MRPI/KUAL setzt es oft nicht automatisch. Wenn moeglich, ZIP so erzeugen, dass `start.sh`, `stop.sh` und das Binary executable bleiben. Ohne Shell-Zugriff ist ein korrekt gepacktes Archiv wichtig.
+
+Kindle UI kommt nach dem Schliessen nicht sauber zurueck: Auf neueren Kindle/PW5-Firmwares kann die native Vollbild-App zwar beendet sein, aber der Kindle-Framework-Screen bleibt optisch haengen. Druecke dann einmal den unteren physischen Display-/Power-Knopf, sodass das Display ausgeht, und wecke den Kindle wieder. Das ist der bevorzugte erste Recovery-Schritt vor einem Reboot. Falls das nicht hilft: `Recover Kindle UI` in KUAL ausfuehren oder zuletzt rebooten.
 
 ## Grenzen
 

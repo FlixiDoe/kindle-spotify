@@ -56,6 +56,8 @@ extensions/spotify-remote/
   www/                      Browser UI assets
 ```
 
+The Kindle-side launcher prefers `bin/spotify-remote-arm.new` when present. This is useful for USB deployments where the currently running `spotify-remote-arm` may be locked by the Kindle.
+
 ## Requirements
 
 Kindle:
@@ -187,6 +189,7 @@ chmod 755 /mnt/us/extensions/spotify-remote/bin/spotify-remote-arm
 ## KUAL Menu
 
 - `config.xml`: KUAL extension metadata and menu registration.
+- `Spotify Remote`: KUAL folder that keeps all Spotify actions grouped instead of spreading them across the main KUAL list.
 - `Touch Remote`: native touch UI for controlling Spotify.
 - `Now Playing Display`: passive display-only now-playing screen.
 - `Stop Now Playing Display`: stops the passive display.
@@ -257,6 +260,8 @@ Run `Recover Kindle UI` from KUAL or execute:
 ```sh
 sh /mnt/us/extensions/spotify-remote/recover.sh
 ```
+
+On newer Kindle firmware/PW5 devices, closing a fullscreen native app may leave the framework visually stuck even after the app exits. In that case, press the lower physical display/power button once to turn the display off, then wake the Kindle again. This usually lets the Kindle framework redraw without a full reboot. If it still does not return, use `Recover Kindle UI` or reboot as the last resort.
 
 ## Security And Publishing Notes
 

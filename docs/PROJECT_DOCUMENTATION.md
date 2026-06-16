@@ -380,6 +380,10 @@ menu.json -> launch.sh -> run-native.sh -> bin/spotify-remote-arm
 
 `run-native.sh` stoppt vor dem Start das Kindle-Framework, damit die native eips-UI nicht von der normalen Kindle-Oberflaeche uebermalt wird. Beim Beenden startet es das Framework wieder.
 
+Der Launcher bevorzugt `bin/spotify-remote-arm.new`, wenn diese Datei existiert. Dadurch kann ein neuer Build per USB bereitgestellt werden, ohne die moeglicherweise noch laufende oder vom Kindle gelockte Datei `bin/spotify-remote-arm` direkt zu ersetzen.
+
+Auf neueren Kindle/PW5-Firmwares kann der Framework-Rueckweg nach dem Beenden visuell haengen bleiben, obwohl der native Prozess beendet ist. Der dokumentierte erste Recovery-Schritt ist dann: unteren physischen Display-/Power-Knopf einmal druecken, Display ausschalten lassen und den Kindle wieder wecken. Das ist schneller und weniger invasiv als ein Reboot. Wenn das nicht reicht, `Recover Kindle UI` in KUAL verwenden.
+
 ### Now Playing Display
 
 Dateien:
@@ -450,6 +454,8 @@ Aktuelle Menuepunkte:
 - `Shuffle`: Shuffle umschalten.
 - `Repeat`: Repeat-Modus umschalten.
 - `Recover Kindle UI`: beendet laufende Prozesse und startet das Kindle-Framework wieder.
+
+Auf dem getesteten Kindle wurde ausserdem ein Kompatibilitaets-Fallback ueber `extensions/kindlefetch/menu.json` verwendet: Dort kann ein einzelner `Spotify Remote`-Ordner eingetragen sein, falls KUAL die dedizierten Spotify-Extension-Ordner nicht anzeigt. Dieser Fallback darf nur den Ordner enthalten, nicht wieder flache `Spotify ...`-Eintraege in der KUAL-Hauptliste.
 
 ## Spotify OAuth
 
@@ -597,6 +603,8 @@ Wenn der Kindle-Browser Spotify Login oder Localhost-Redirect nicht sauber schaf
 ### Display sieht klein aus
 
 Das Foto aus der Fehleranalyse zeigte die passive `Now Playing Display`-Ansicht. Diese wurde groesser skaliert und als passive Anzeige beschriftet. Fuer Touch-Bedienung muss `Touch Remote` gestartet werden.
+
+Der spaetere Versuch, das Now-Playing-Layout deutlich groesser ueber das ganze Display zu ziehen, wurde wieder zurueckgenommen, weil er das Layout auf echter Hardware zerstoert hat. Der aktuelle Stand ist der zuvor funktionierende kompaktere FBInk-Screen mit Albumcover, Titel/Artist/Album, Fortschritt und grossen Touchzonen.
 
 ### Tippen funktioniert nicht
 
