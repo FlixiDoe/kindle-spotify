@@ -50,7 +50,14 @@ start_framework() {
     rm -f "$FLAG_FILE"
     FRAMEWORK_WAS_STOPPED=0
     framework_ctl start || true
+    sleep 1
+    framework_ctl start || true
     lipc-set-prop com.lab126.powerd preventScreenSaver 0 >/dev/null 2>&1 || true
+    lipc-set-prop com.lab126.appmgrd start app://com.lab126.booklet.home >/dev/null 2>&1 || true
+    if command -v eips >/dev/null 2>&1; then
+      eips 2 0 "Spotify Remote closed."
+      eips 4 0 "Press Home or reopen KUAL."
+    fi
   fi
 }
 
@@ -95,4 +102,5 @@ echo "$APP_PID" > "$PID_FILE"
 wait "$APP_PID"
 WAIT_STATUS="$?"
 log "Native Spotify Remote exited with status $WAIT_STATUS"
+sleep 1
 exit "$WAIT_STATUS"

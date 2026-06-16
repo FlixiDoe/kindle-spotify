@@ -171,8 +171,16 @@ func (a *app) runFBInkUI() {
 	a.status = "Starting UI"
 	tapCh := make(chan string, 8)
 	done := make(chan struct{})
+	stopTouch := func() {
+		select {
+		case <-done:
+		default:
+			close(done)
+			time.Sleep(250 * time.Millisecond)
+		}
+	}
 	go a.grabTouchLoop(tapCh, done)
-	defer close(done)
+	defer stopTouch()
 
 	nextDraw := time.Now()
 	for {
@@ -180,7 +188,8 @@ func (a *app) runFBInkUI() {
 		case action := <-tapCh:
 			log.Printf("UI action: %s", action)
 			if action == "quit" {
-				a.fbinkClear()
+				stopTouch()
+				a.fbinkExitMessage()
 				return
 			}
 			a.uiControl(action)
@@ -193,6 +202,13 @@ func (a *app) runFBInkUI() {
 		}
 		time.Sleep(120 * time.Millisecond)
 	}
+}
+
+func (a *app) fbinkExitMessage() {
+	eipsClear()
+	a.fbinkText(3, 12, "Closing Spotify Remote")
+	a.fbinkText(2, 16, "Returning to Kindle...")
+	log.Printf("FBInk UI exit message drawn")
 }
 
 func (a *app) uiControl(action string) {
