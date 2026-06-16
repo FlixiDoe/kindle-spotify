@@ -4,6 +4,8 @@ Spotify playback control for jailbroken Kindle devices via KUAL.
 
 This project provides a Kindle-friendly Spotify remote with a native e-ink touch UI, a passive now-playing display, and a fallback browser-based interface. It is designed around Kindle Paperwhite 11th generation / PW5 class devices, but the code is intentionally small enough to adapt to nearby Kindle models.
 
+This is an independent hobby project and is not affiliated with, endorsed by, sponsored by, or approved by Spotify AB or Amazon.
+
 ## Features
 
 - Native full-screen Kindle remote launched from KUAL
@@ -277,6 +279,18 @@ Do not publish local runtime data:
 Historical crash logs that are useful for debugging can be kept under `docs/crash-logs/`. Root-level ad hoc crash dumps are ignored until they are reviewed and moved there intentionally.
 
 If any token file was ever committed, rotate the Spotify authorization by deleting the token and logging in again. For a public repository, also rewrite Git history before publishing if sensitive data was committed in earlier commits.
+
+## Legal, Privacy, And Security
+
+- License: [MIT License](LICENSE)
+- Notices and trademark/disaffiliation notes: [NOTICE](NOTICE)
+- Jailbreak, warranty, Spotify Premium, and use-at-your-own-risk disclaimer: [DISCLAIMER.md](DISCLAIMER.md)
+- Local token/config handling: [SECURITY.md](SECURITY.md)
+- Local data and Spotify API privacy notes: [PRIVACY.md](PRIVACY.md)
+
+Spotify is a trademark of Spotify AB. Amazon, Kindle, and Kindle Paperwhite are trademarks of their respective owners.
+
+Use of Spotify APIs is subject to Spotify's Developer Terms and policies. This app uses OAuth PKCE and does not use a Spotify Client Secret.
 
 ## Developer Workflow
 

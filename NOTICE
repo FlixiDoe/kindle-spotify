@@ -1,0 +1,21 @@
+# Notices
+
+This project is an independent hobby project.
+
+Spotify is a trademark of Spotify AB. This project is not affiliated with,
+endorsed by, sponsored by, or approved by Spotify AB. Use of the Spotify Web
+API is subject to Spotify's Developer Terms, Developer Policy, and any other
+terms that apply to the user's Spotify account and Spotify Developer app.
+
+Amazon, Kindle, Kindle Paperwhite, and related names are trademarks of their
+respective owners. This project is not affiliated with, endorsed by, sponsored
+by, or approved by Amazon.
+
+Users are responsible for ensuring that their device modification, jailbreak,
+KUAL installation, Spotify Developer app configuration, and use of this
+software are allowed in their jurisdiction and under the applicable device,
+account, service, and platform terms.
+
+This repository does not include a Spotify Client Secret. The app uses OAuth
+PKCE and expects every user to provide their own Spotify Developer App Client
+ID locally.
