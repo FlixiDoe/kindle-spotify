@@ -27,7 +27,7 @@ ps 2>/dev/null | grep '[s]potify-remote-arm ui' | while read PID REST; do
   kill "$PID" 2>/dev/null || true
 done
 
-log "Starting native Now Playing UI"
-nohup "$BIN" ui >> "$LOG_FILE" 2>&1 &
+log "Starting native Now Playing UI via framework-safe launcher"
+nohup sh "$APP_DIR/run-native.sh" ui >> "$LOG_FILE" 2>&1 &
 echo "$!" > "$PID_FILE"
 exit 0

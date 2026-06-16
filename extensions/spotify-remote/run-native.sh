@@ -5,6 +5,7 @@ LOG_FILE="$APP_DIR/logs/spotify-remote.log"
 PID_FILE="$APP_DIR/data/spotify-remote.pid"
 LAUNCHER_PID_FILE="$APP_DIR/data/launcher.pid"
 FLAG_FILE="/tmp/spotify-remote.framework-stopped"
+MODE="$1"
 
 mkdir -p "$APP_DIR/data" "$APP_DIR/logs"
 
@@ -63,8 +64,13 @@ fi
 
 stop_framework
 cd "$APP_DIR" || exit 1
-log "Running native binary"
-"$BIN" >> "$LOG_FILE" 2>&1 &
+if [ "$MODE" = "ui" ]; then
+  log "Running native binary in FBInk UI mode"
+  "$BIN" ui >> "$LOG_FILE" 2>&1 &
+else
+  log "Running native binary"
+  "$BIN" >> "$LOG_FILE" 2>&1 &
+fi
 APP_PID="$!"
 echo "$APP_PID" > "$PID_FILE"
 wait "$APP_PID"

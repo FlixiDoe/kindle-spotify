@@ -18,7 +18,7 @@ if [ -f "$PID_FILE" ]; then
 fi
 
 log "Queueing native Spotify Remote launch"
-nohup sh "$APP_DIR/run-native.sh" >> "$LOG_FILE" 2>&1 &
+nohup sh "$APP_DIR/run-native.sh" ui >> "$LOG_FILE" 2>&1 &
 echo "$!" > "$PID_FILE"
 
 if command -v eips >/dev/null 2>&1; then

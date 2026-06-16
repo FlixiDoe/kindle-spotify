@@ -241,15 +241,14 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkClear()
 	time.Sleep(250 * time.Millisecond)
 	a.fbinkText(4, 1, "SPOTIFY REMOTE")
-	a.fbinkText(4, 4, "+====================+")
-	a.fbinkText(4, 5, "|                    |")
-	a.fbinkText(4, 6, "|                    |")
-	a.fbinkText(4, 7, "|                    |")
-	a.fbinkText(4, 8, "+====================+")
 	if coverPath != "" {
 		a.fbinkImage(coverPath)
 	} else {
+		a.fbinkText(4, 4, "+====================+")
+		a.fbinkText(4, 5, "|                    |")
 		a.fbinkText(4, 6, "|    ALBUM COVER     |")
+		a.fbinkText(4, 7, "|                    |")
+		a.fbinkText(4, 8, "+====================+")
 	}
 	a.fbinkText(4, 11, state)
 	a.fbinkText(6, 13, safe(title, 18))
@@ -274,8 +273,10 @@ func (a *app) fbinkPath() string {
 
 func (a *app) fbinkClear() {
 	if p := a.fbinkPath(); p != "" {
-		_ = exec.Command(p, "-k").Run()
+		_ = exec.Command(p, "-q", "-f", "-c").Run()
+		_ = exec.Command(p, "-q", "-k").Run()
 	}
+	eipsClear()
 }
 
 func (a *app) fbinkText(size, row int, text string) {
@@ -286,7 +287,7 @@ func (a *app) fbinkText(size, row int, text string) {
 
 func (a *app) fbinkImage(path string) {
 	if p := a.fbinkPath(); p != "" {
-		spec := fmt.Sprintf("file=%s,halign=CENTER,valign=TOP,x=0,y=120,w=420,h=420,dither", path)
+		spec := fmt.Sprintf("file=%s,halign=CENTER,valign=TOP,x=0,y=105,w=460,h=460,dither,flatten", path)
 		_ = exec.Command(p, "-q", "-g", spec).Run()
 	}
 }
@@ -329,20 +330,32 @@ func (a *app) prepareCover(images []albumImage) string {
 }
 
 func (a *app) grabTouchLoop(out chan<- string, done <-chan struct{}) {
-	for _, path := range []string{"/dev/input/event1", "/dev/input/event2", "/dev/input/event3", "/dev/input/event0"} {
-		if f, err := os.Open(path); err == nil {
-			log.Printf("Trying touch grab on %s", path)
-			if err := ioctlGrab(f, true); err != nil {
-				log.Printf("Touch grab failed on %s: %v", path, err)
-				_ = f.Close()
-				continue
-			}
-			log.Printf("Touch grabbed on %s", path)
-			a.readGrabbedTouch(f, out, done)
-			return
+	var grabbed int
+	for _, path := range []string{"/dev/input/event0", "/dev/input/event1", "/dev/input/event2", "/dev/input/event3", "/dev/input/event4", "/dev/input/event5"} {
+		f, err := os.Open(path)
+		if err != nil {
+			continue
 		}
+		cal, ok := queryInputAbsCalibration(f)
+		if !ok {
+			_ = f.Close()
+			continue
+		}
+		log.Printf("Trying touch grab on %s (%s x=%d..%d y=%d..%d)", path, cal.Source, cal.MinX, cal.MaxX, cal.MinY, cal.MaxY)
+		if err := ioctlGrab(f, true); err != nil {
+			log.Printf("Touch grab failed on %s: %v", path, err)
+			_ = f.Close()
+			continue
+		}
+		grabbed++
+		log.Printf("Touch grabbed on %s", path)
+		go a.readGrabbedTouch(f, out, done)
 	}
-	log.Printf("No touch device grabbed")
+	if grabbed == 0 {
+		log.Printf("No touch device grabbed")
+	} else {
+		log.Printf("Touch grabbed on %d device(s)", grabbed)
+	}
 }
 
 func ioctlGrab(f *os.File, grab bool) error {
