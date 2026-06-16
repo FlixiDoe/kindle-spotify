@@ -268,7 +268,6 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
 	a.fbinkText(3, 39, "VOL "+volume+"  SHUF "+shuffle+"  REP "+repeat)
 	a.fbinkText(2, -4, "Refresh 8s. Quit only in lower-right.")
-	a.fbinkText(3, 34, "QUIT")
 	log.Printf("FBInk UI drawn: %s / %s", title, artist)
 }
 
@@ -298,10 +297,9 @@ func (a *app) fbinkText(size, row int, text string) {
 func (a *app) fbinkImage(path string) {
 	if p := a.fbinkPath(); p != "" {
 		attempts := [][]string{
-			{"-q", "-g", fmt.Sprintf("file=%s,halign=CENTER,valign=TOP,x=0,y=105,w=460,h=460,dither,flatten", path)},
-			{"-q", "-g", fmt.Sprintf("file=%s,x=0,y=105,w=460,h=460,dither,flatten", path)},
-			{"-q", "-g", path},
-			{"-q", "-i", path},
+			{"-q", "-g", fmt.Sprintf("file=%s,x=388,y=95,w=460,h=460,dither,flatten", path)},
+			{"-q", "-g", fmt.Sprintf("file=%s,x=388,y=95,w=460,h=460,dither", path)},
+			{"-q", "-g", fmt.Sprintf("file=%s,x=388,y=95", path)},
 		}
 		for i, args := range attempts {
 			cmd := exec.Command(p, args...)
