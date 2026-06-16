@@ -1,1 +1,6 @@
-start here
+Start here:
+
+- Public README: README.md
+- Internal project notes: docs/PROJECT_DOCUMENTATION.md
+- Historical crash logs: docs/crash-logs/
+- Extension notes: extensions/spotify-remote/README.md

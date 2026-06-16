@@ -26,10 +26,25 @@ import (
 const scopes = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
 
 type config struct {
-	ClientID   string `json:"client_id"`
-	Redirect   string `json:"redirect_uri"`
-	Port       int    `json:"port"`
-	RefreshSec int    `json:"refresh_seconds"`
+	ClientID          string `json:"client_id"`
+	Redirect          string `json:"redirect_uri"`
+	Port              int    `json:"port"`
+	RefreshSec        int    `json:"refresh_seconds"`
+	ScreenWidth       int    `json:"screen_width"`
+	ScreenHeight      int    `json:"screen_height"`
+	TouchMinX         int    `json:"touch_min_x"`
+	TouchMaxX         int    `json:"touch_max_x"`
+	TouchMinY         int    `json:"touch_min_y"`
+	TouchMaxY         int    `json:"touch_max_y"`
+	TouchSwapXY       bool   `json:"touch_swap_xy"`
+	TouchInvertX      bool   `json:"touch_invert_x"`
+	TouchInvertY      bool   `json:"touch_invert_y"`
+	TouchUseKernelAbs *bool  `json:"touch_use_kernel_abs"`
+	EipsColWidth      int    `json:"eips_col_width"`
+	EipsRowHeight     int    `json:"eips_row_height"`
+	ButtonTop         int    `json:"button_top"`
+	ButtonHeight      int    `json:"button_height"`
+	ButtonGap         int    `json:"button_gap"`
 }
 
 type tokenFile struct {
@@ -100,6 +115,7 @@ type app struct {
 	mu         sync.Mutex
 	lastDraw   time.Time
 	lastAction time.Time
+	lastTap    string
 	quit       chan struct{}
 }
 
@@ -685,8 +701,78 @@ func (a *app) setupLog() {
 }
 
 func (a *app) loadConfig() error {
-	a.cfg = config{Redirect: "http://127.0.0.1:8787/callback", Port: 8787, RefreshSec: 8}
-	return readJSON(filepath.Join(a.base, "data", "config.json"), &a.cfg)
+	a.cfg = defaultConfig()
+	err := readJSON(filepath.Join(a.base, "data", "config.json"), &a.cfg)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	a.normalizeConfig()
+	return err
+}
+
+func defaultConfig() config {
+	return config{
+		Redirect:          "http://127.0.0.1:8787/callback",
+		Port:              8787,
+		RefreshSec:        8,
+		ScreenWidth:       1236,
+		ScreenHeight:      1648,
+		TouchMinX:         0,
+		TouchMaxX:         4095,
+		TouchMinY:         0,
+		TouchMaxY:         4095,
+		TouchUseKernelAbs: boolPtr(true),
+		EipsColWidth:      22,
+		EipsRowHeight:     40,
+		ButtonTop:         660,
+		ButtonHeight:      88,
+		ButtonGap:         2,
+	}
+}
+
+func (a *app) normalizeConfig() {
+	if a.cfg.Redirect == "" {
+		a.cfg.Redirect = "http://127.0.0.1:8787/callback"
+	}
+	if a.cfg.Port == 0 {
+		a.cfg.Port = 8787
+	}
+	if a.cfg.RefreshSec == 0 {
+		a.cfg.RefreshSec = 8
+	}
+	if a.cfg.ScreenWidth == 0 {
+		a.cfg.ScreenWidth = 1236
+	}
+	if a.cfg.ScreenHeight == 0 {
+		a.cfg.ScreenHeight = 1648
+	}
+	if a.cfg.TouchMaxX <= a.cfg.TouchMinX {
+		a.cfg.TouchMinX = 0
+		a.cfg.TouchMaxX = 4095
+	}
+	if a.cfg.TouchMaxY <= a.cfg.TouchMinY {
+		a.cfg.TouchMinY = 0
+		a.cfg.TouchMaxY = 4095
+	}
+	if a.cfg.EipsColWidth == 0 {
+		a.cfg.EipsColWidth = 22
+	}
+	if a.cfg.EipsRowHeight == 0 {
+		a.cfg.EipsRowHeight = 40
+	}
+	if a.cfg.ButtonTop == 0 {
+		a.cfg.ButtonTop = 660
+	}
+	if a.cfg.ButtonHeight == 0 {
+		a.cfg.ButtonHeight = 88
+	}
+	if a.cfg.ButtonGap == 0 {
+		a.cfg.ButtonGap = 2
+	}
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 func readJSON(path string, out any) error {
@@ -830,8 +916,8 @@ func (a *app) showDevices() {
 			label = "* " + label
 		}
 		devID := d.ID
-		eips(row, 0, safe(label, 45))
-		a.buttons = append(a.buttons, uiButton{Label: label, X1: 0, Y1: rowToY(row), X2: 1072, Y2: rowToY(row + 2), Do: func() {
+		eips(row, 0, safe(label, 55))
+		a.buttons = append(a.buttons, uiButton{Label: label, X1: 0, Y1: a.rowToY(row), X2: a.cfg.ScreenWidth, Y2: a.rowToY(row + 2), Do: func() {
 			body := strings.NewReader(fmt.Sprintf(`{"device_ids":["%s"],"play":false}`, devID))
 			_, err := a.spotifyAPI(http.MethodPut, "https://api.spotify.com/v1/me/player", body, nil)
 			a.mu.Lock()
@@ -844,8 +930,8 @@ func (a *app) showDevices() {
 			a.refresh()
 		}})
 	}
-	a.buttons = append(a.buttons, uiButton{Label: "Back", X1: 760, Y1: 1250, X2: 1072, Y2: 1448, Do: func() { a.refresh() }})
-	eips(34, 30, "Back")
+	a.buttons = append(a.buttons, uiButton{Label: "Back", X1: a.cfg.ScreenWidth * 7 / 10, Y1: a.cfg.ScreenHeight * 7 / 8, X2: a.cfg.ScreenWidth, Y2: a.cfg.ScreenHeight, Do: func() { a.refresh() }})
+	eips(38, 40, "Back")
 }
 
 func (a *app) login() {
@@ -1060,45 +1146,49 @@ func (a *app) drawLocked() {
 	a.lastDraw = time.Now()
 	eipsClear()
 	eips(1, 0, "SPOTIFY REMOTE")
-	eips(3, 0, safe("Status: "+a.status, 48))
+	eips(3, 0, safe("Status: "+a.status, 55))
 	if a.err != "" {
 		eips(5, 0, "ERROR:")
-		eips(6, 0, safe(a.err, 48))
+		eips(6, 0, safe(a.err, 55))
 	}
 	row := 9
 	if a.hasState {
-		eips(row, 0, safe(a.state.CurrentTrack.Name, 48))
-		eips(row+1, 0, safe(artistNames(a.state.CurrentTrack.Artists), 48))
-		eips(row+2, 0, safe(a.state.CurrentTrack.Album.Name, 48))
+		eips(row, 0, safe(a.state.CurrentTrack.Name, 55))
+		eips(row+1, 0, safe(artistNames(a.state.CurrentTrack.Artists), 55))
+		eips(row+2, 0, safe(a.state.CurrentTrack.Album.Name, 55))
 		eips(row+4, 0, fmt.Sprintf("%s  %s  Vol %d", playText(a.state.IsPlaying), fmtProgress(a.state.ProgressMS, a.state.CurrentTrack.DurationMS), a.state.Device.VolumePercent))
 		eips(row+5, 0, fmt.Sprintf("Shuffle %v  Repeat %s", a.state.Shuffle, a.state.Repeat))
 	} else {
 		eips(row, 0, "No playback loaded.")
 		eips(row+1, 0, "Tap LOGIN first.")
 	}
+	if a.lastTap != "" {
+		eips(row+7, 0, safe(a.lastTap, 55))
+	}
 	a.buttons = []uiButton{
-		a.button(0, "LOGIN", func() { go a.control("login") }),
-		a.button(1, "REFRESH", func() { go a.refresh() }),
-		a.button(2, "PREVIOUS", func() { go a.control("prev") }),
-		a.button(3, "PLAY / PAUSE", func() { go a.control("playpause") }),
-		a.button(4, "NEXT", func() { go a.control("next") }),
-		a.button(5, "VOLUME -", func() { go a.control("voldown") }),
-		a.button(6, "VOLUME +", func() { go a.control("volup") }),
-		a.button(7, "SHUFFLE", func() { go a.control("shuffle") }),
-		a.button(8, "REPEAT", func() { go a.control("repeat") }),
-		a.button(9, "DEVICES", func() { go a.control("devices") }),
+		a.button(0, "PREVIOUS", func() { go a.control("prev") }),
+		a.button(1, "PLAY / PAUSE", func() { go a.control("playpause") }),
+		a.button(2, "NEXT", func() { go a.control("next") }),
+		a.button(3, "VOLUME -", func() { go a.control("voldown") }),
+		a.button(4, "VOLUME +", func() { go a.control("volup") }),
+		a.button(5, "SHUFFLE", func() { go a.control("shuffle") }),
+		a.button(6, "REPEAT", func() { go a.control("repeat") }),
+		a.button(7, "DEVICES", func() { go a.control("devices") }),
+		a.button(8, "REFRESH", func() { go a.refresh() }),
+		a.button(9, "LOGIN", func() { go a.control("login") }),
 		a.button(10, "QUIT", func() { go a.control("quit") }),
 	}
 	for i, b := range a.buttons {
-		r := yToRow(b.Y1) + 1
-		eips(r, 0, "------------------------------------------------")
+		r := a.yToRow(b.Y1)
+		eips(r, 0, "--------------------------------------------------------")
 		eips(r+1, 2, fmt.Sprintf("%02d  %s", i+1, b.Label))
 	}
 }
 
 func (a *app) button(slot int, label string, do func()) uiButton {
-	y1 := 600 + slot*74
-	return uiButton{Label: label, X1: 0, Y1: y1, X2: 1072, Y2: y1 + 72, Do: do}
+	step := a.cfg.ButtonHeight + a.cfg.ButtonGap
+	y1 := a.cfg.ButtonTop + slot*step
+	return uiButton{Label: label, X1: 0, Y1: y1, X2: a.cfg.ScreenWidth, Y2: y1 + a.cfg.ButtonHeight, Do: do}
 }
 
 func eipsClear() {
@@ -1124,11 +1214,26 @@ type inputEvent struct {
 	Value int32
 }
 
+type touchCalibration struct {
+	MinX   int
+	MaxX   int
+	MinY   int
+	MaxY   int
+	Source string
+}
+
 func (a *app) touchLoop() {
+	opened := make(map[string]bool)
 	for {
 		for i := 0; i < 12; i++ {
 			p := "/dev/input/event" + strconv.Itoa(i)
-			go a.readInput(p)
+			if !opened[p] {
+				if _, err := os.Stat(p); err == nil {
+					opened[p] = true
+					log.Printf("opening input device %s", p)
+					go a.readInput(p)
+				}
+			}
 		}
 		time.Sleep(30 * time.Second)
 	}
@@ -1140,58 +1245,144 @@ func (a *app) readInput(path string) {
 		return
 	}
 	defer f.Close()
+	cal := a.touchCalibration(f, path)
 	var x, y int
+	var hasCoords bool
+	var touching bool
+	var sawTouchKey bool
+	var sawTrackingID bool
+	var pendingRelease bool
 	for {
 		var ev inputEvent
 		if err := binary.Read(f, binary.LittleEndian, &ev); err != nil {
 			return
 		}
 		switch ev.Type {
-		case 3:
-			if ev.Code == 0 || ev.Code == 0x35 {
+		case 3: // EV_ABS
+			switch ev.Code {
+			case 0x00, 0x35: // ABS_X, ABS_MT_POSITION_X
 				x = int(ev.Value)
-			}
-			if ev.Code == 1 || ev.Code == 0x36 {
+				hasCoords = true
+			case 0x01, 0x36: // ABS_Y, ABS_MT_POSITION_Y
 				y = int(ev.Value)
+				hasCoords = true
+			case 0x39: // ABS_MT_TRACKING_ID
+				sawTrackingID = true
+				if ev.Value >= 0 {
+					touching = true
+					pendingRelease = false
+				} else {
+					touching = false
+					pendingRelease = true
+				}
 			}
-		case 1:
-			if ev.Code == 0x14a && ev.Value == 0 {
-				a.tap(x, y)
+		case 1: // EV_KEY
+			switch ev.Code {
+			case 0x14a, 0x145: // BTN_TOUCH, BTN_TOOL_FINGER
+				sawTouchKey = true
+				if ev.Value == 1 {
+					touching = true
+					pendingRelease = false
+				} else if ev.Value == 0 {
+					touching = false
+					pendingRelease = true
+				}
+			}
+		case 0: // EV_SYN (SYN_REPORT)
+			if ev.Code != 0 {
+				continue
+			}
+			if pendingRelease && hasCoords {
+				a.tap(x, y, cal)
+				hasCoords = false
+				pendingRelease = false
+				continue
+			}
+			// Last-resort fallback for unusual devices that emit only ABS+SYN.
+			if !touching && !sawTouchKey && !sawTrackingID && hasCoords {
+				a.tap(x, y, cal)
+				hasCoords = false
 			}
 		}
 	}
 }
 
-func (a *app) tap(rawX, rawY int) {
+func (a *app) touchCalibration(f *os.File, path string) touchCalibration {
+	cal := touchCalibration{
+		MinX:   a.cfg.TouchMinX,
+		MaxX:   a.cfg.TouchMaxX,
+		MinY:   a.cfg.TouchMinY,
+		MaxY:   a.cfg.TouchMaxY,
+		Source: "config",
+	}
+	if a.cfg.TouchUseKernelAbs != nil && !*a.cfg.TouchUseKernelAbs {
+		log.Printf("touch calibration for %s: config x=%d..%d y=%d..%d", path, cal.MinX, cal.MaxX, cal.MinY, cal.MaxY)
+		return cal
+	}
+	if kernelCal, ok := queryInputAbsCalibration(f); ok {
+		log.Printf("touch calibration for %s: %s x=%d..%d y=%d..%d", path, kernelCal.Source, kernelCal.MinX, kernelCal.MaxX, kernelCal.MinY, kernelCal.MaxY)
+		return kernelCal
+	}
+	log.Printf("touch calibration for %s: config fallback x=%d..%d y=%d..%d", path, cal.MinX, cal.MaxX, cal.MinY, cal.MaxY)
+	return cal
+}
+
+func (a *app) tap(rawX, rawY int, cal touchCalibration) {
 	if time.Since(a.lastAction) < 500*time.Millisecond {
 		return
 	}
 	a.lastAction = time.Now()
-	x, y := normalizeTouch(rawX, rawY)
-	log.Printf("tap raw=(%d,%d) normalized=(%d,%d)", rawX, rawY, x, y)
+	x, y := a.normalizeTouch(rawX, rawY, cal)
+	log.Printf("tap raw=(%d,%d) normalized=(%d,%d) calibration=%s x=%d..%d y=%d..%d", rawX, rawY, x, y, cal.Source, cal.MinX, cal.MaxX, cal.MinY, cal.MaxY)
 	a.mu.Lock()
 	buttons := append([]uiButton(nil), a.buttons...)
 	a.mu.Unlock()
 	for _, b := range buttons {
 		if x >= b.X1 && x <= b.X2 && y >= b.Y1 && y <= b.Y2 {
 			log.Printf("tap hit %s", b.Label)
+			a.setLastTap(fmt.Sprintf("Tap %s raw=%d,%d xy=%d,%d", b.Label, rawX, rawY, x, y), false)
 			b.Do()
 			return
 		}
 	}
-	log.Printf("tap missed")
+	log.Printf("tap missed at (%d,%d)", x, y)
+	a.setLastTap(fmt.Sprintf("Miss raw=%d,%d xy=%d,%d", rawX, rawY, x, y), true)
 }
 
-func normalizeTouch(x, y int) (int, int) {
-	if x > 1072 || y > 1448 {
-		if x > 0 {
-			x = x * 1072 / 4095
-		}
-		if y > 0 {
-			y = y * 1448 / 4095
-		}
+func (a *app) setLastTap(msg string, redraw bool) {
+	a.mu.Lock()
+	a.lastTap = msg
+	if redraw {
+		a.lastDraw = time.Time{}
+		a.drawLocked()
 	}
-	return clamp(x, 0, 1072), clamp(y, 0, 1448)
+	a.mu.Unlock()
+}
+
+func (a *app) normalizeTouch(rawX, rawY int, cal touchCalibration) (int, int) {
+	x, y := rawX, rawY
+	minX, maxX := cal.MinX, cal.MaxX
+	minY, maxY := cal.MinY, cal.MaxY
+	if a.cfg.TouchSwapXY {
+		x, y = y, x
+		minX, maxX, minY, maxY = minY, maxY, minX, maxX
+	}
+	x = scaleTouchAxis(x, minX, maxX, a.cfg.ScreenWidth)
+	y = scaleTouchAxis(y, minY, maxY, a.cfg.ScreenHeight)
+	if a.cfg.TouchInvertX {
+		x = a.cfg.ScreenWidth - x
+	}
+	if a.cfg.TouchInvertY {
+		y = a.cfg.ScreenHeight - y
+	}
+	return clamp(x, 0, a.cfg.ScreenWidth), clamp(y, 0, a.cfg.ScreenHeight)
+}
+
+func scaleTouchAxis(v, rawMin, rawMax, screen int) int {
+	if rawMax <= rawMin {
+		return clamp(v, 0, screen)
+	}
+	return (v - rawMin) * screen / (rawMax - rawMin)
 }
 
 func validClientID(id string) bool {
@@ -1244,10 +1435,10 @@ func safe(s string, n int) string {
 	return string(r[:n-3]) + "..."
 }
 
-func xToCol(x int) int { return x / 22 }
-func yToRow(y int) int { return y / 36 }
-func rowToY(row int) int {
-	return row * 36
+func (a *app) xToCol(x int) int { return x / a.cfg.EipsColWidth }
+func (a *app) yToRow(y int) int { return y / a.cfg.EipsRowHeight }
+func (a *app) rowToY(row int) int {
+	return row * a.cfg.EipsRowHeight
 }
 
 func clamp(v, lo, hi int) int {

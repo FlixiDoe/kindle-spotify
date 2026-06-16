@@ -1,0 +1,295 @@
+# Kindle Spotify Remote
+
+Spotify playback control for jailbroken Kindle devices via KUAL.
+
+This project provides a Kindle-friendly Spotify remote with a native e-ink touch UI, a passive now-playing display, and a fallback browser-based interface. It is designed around Kindle Paperwhite 11th generation / PW5 class devices, but the code is intentionally small enough to adapt to nearby Kindle models.
+
+## Features
+
+- Native full-screen Kindle remote launched from KUAL
+- Touch controls for play/pause, next, previous, volume, shuffle, repeat, refresh, login, and device selection
+- Passive now-playing display for e-ink dashboards
+- Spotify OAuth PKCE flow without a client secret
+- Local token refresh and Spotify Web API proxy
+- Manual login fallback for Kindle browser redirect issues
+- Cross-compile scripts for Linux ARM Kindle targets
+- Recovery script to restart the Kindle framework if the native UI is interrupted
+
+## Target Devices
+
+The current native layout is tuned for Kindle Paperwhite 11th generation / PW5 style devices.
+
+Current native assumptions:
+
+- Display: `1236x1648`
+- Touch raw range: `0..4095`
+- Renderer: Kindle `eips`
+- Extension path on device: `/mnt/us/extensions/spotify-remote`
+
+Other Kindle models may need layout or touch-coordinate calibration in `extensions/spotify-remote/src/native/main.go`.
+
+## Architecture Notes
+
+Detailed implementation notes live in `docs/PROJECT_DOCUMENTATION.md`. That document also includes a dedicated section named `Externe Research-Notizen von Gemini`, based on Gemini 3.1 Pro deep research about Kindle/KUAL app development. Those notes are treated as architecture input and are separated from verified project behavior.
+
+## Repository Layout
+
+```text
+README.md                  Public project overview
+docs/
+  PROJECT_DOCUMENTATION.md Internal implementation and deployment notes
+  crash-logs/              Historical crash logs kept for debugging context
+extensions/spotify-remote/
+  config.xml                KUAL extension metadata
+  menu.json                 KUAL menu definition
+  launch.sh                 Starts the native touch remote through run-native.sh
+  run-native.sh             Stops Kindle framework, runs native binary, restores framework
+  stop.sh                   Stops the native app and restores Kindle UI
+  recover.sh                Emergency UI recovery helper
+  nowplaying-launch.sh      Starts passive now-playing display
+  nowplaying.sh             Draws passive now-playing display with fbink/eips
+  nowplaying-stop.sh        Stops passive now-playing display
+  build.sh                  Linux/macOS cross-compile helper
+  build.ps1                 Windows PowerShell cross-compile helper
+  src/native/main.go        Native KUAL/touch/eips Spotify remote
+  src/spotify-remote.go     Browser-server remote implementation
+  www/                      Browser UI assets
+```
+
+## Requirements
+
+Kindle:
+
+- Jailbroken Kindle with KUAL
+- Shell script execution from `/mnt/us/extensions`
+- Network access to Spotify endpoints
+- Spotify Premium for playback-control actions
+
+Development machine:
+
+- Go
+- PowerShell on Windows or POSIX shell on Linux/macOS
+
+Spotify:
+
+- Spotify Developer app
+- Redirect URI configured as `http://127.0.0.1:8787/callback`
+
+## Spotify Setup
+
+1. Open the Spotify Developer Dashboard.
+2. Create an app.
+3. Add this redirect URI exactly:
+
+```text
+http://127.0.0.1:8787/callback
+```
+
+4. Copy the Client ID.
+5. Create `extensions/spotify-remote/data/config.json` from the example:
+
+```json
+{
+  "client_id": "PASTE_SPOTIFY_CLIENT_ID_HERE",
+  "redirect_uri": "http://127.0.0.1:8787/callback",
+  "port": 8787,
+  "refresh_seconds": 8,
+  "show_cover": true,
+  "screen_width": 1236,
+  "screen_height": 1648,
+  "touch_min_x": 0,
+  "touch_max_x": 4095,
+  "touch_min_y": 0,
+  "touch_max_y": 4095,
+  "touch_swap_xy": false,
+  "touch_invert_x": false,
+  "touch_invert_y": false,
+  "touch_use_kernel_abs": true,
+  "eips_col_width": 22,
+  "eips_row_height": 40,
+  "button_top": 660,
+  "button_height": 88,
+  "button_gap": 2
+}
+```
+
+Do not use or store a Spotify Client Secret on the Kindle. This project uses PKCE because the Kindle storage should be treated as user-accessible.
+
+## Build
+
+Windows:
+
+```powershell
+cd extensions\spotify-remote
+.\build.ps1
+```
+
+Linux/macOS:
+
+```sh
+cd extensions/spotify-remote
+./build.sh
+```
+
+The build creates:
+
+```text
+extensions/spotify-remote/bin/spotify-remote-arm
+```
+
+Default target:
+
+```text
+GOOS=linux
+GOARCH=arm
+GOARM=7
+CGO_ENABLED=0
+```
+
+If the binary does not run on an older Kindle, try rebuilding with `GOARM=6`.
+
+## Package
+
+From the repository root:
+
+```powershell
+Compress-Archive -Path extensions\spotify-remote -DestinationPath spotify-remote-kual.zip -Force
+```
+
+Or on Linux/macOS:
+
+```sh
+zip -r spotify-remote-kual.zip extensions/spotify-remote
+```
+
+Release packages should include the built binary, but source commits should not track local binaries, generated ZIPs, logs, or token files.
+
+## Install On Kindle
+
+1. Connect the Kindle over USB.
+2. Copy `extensions/spotify-remote` to:
+
+```text
+/mnt/us/extensions/spotify-remote
+```
+
+3. Ensure scripts and binary are executable:
+
+```sh
+chmod 755 /mnt/us/extensions/spotify-remote/*.sh
+chmod 755 /mnt/us/extensions/spotify-remote/bin/spotify-remote-arm
+```
+
+4. Eject the Kindle.
+5. Open KUAL.
+6. Start `Spotify Remote -> Touch Remote`.
+
+## KUAL Menu
+
+- `config.xml`: KUAL extension metadata and menu registration.
+- `Touch Remote`: native touch UI for controlling Spotify.
+- `Now Playing Display`: passive display-only now-playing screen.
+- `Stop Now Playing Display`: stops the passive display.
+- `Create Login URL`: writes a Spotify login URL to `data/login_url.txt`.
+- `Finish Login From callback.txt`: exchanges a pasted redirect URL or code from `data/callback.txt`.
+- `Status`: writes current playback status to `data/status.txt`.
+- `Play / Pause`, `Next`, `Previous`, `Volume +`, `Volume -`, `Shuffle`, `Repeat`: direct KUAL actions.
+- `Recover Kindle UI`: attempts to restore the Kindle framework and clear the screen.
+
+## Login Flow
+
+Preferred flow:
+
+1. Start `Touch Remote`.
+2. Use `Login`.
+3. Complete Spotify authorization.
+4. Return to the remote and refresh playback.
+
+Manual fallback:
+
+1. Run `Create Login URL` in KUAL.
+2. Open `data/login_url.txt` on another device.
+3. Complete Spotify authorization.
+4. Paste the final redirect URL or only the `code` value into `data/callback.txt`.
+5. Run `Finish Login From callback.txt` in KUAL.
+
+## Troubleshooting
+
+`No active Spotify device`
+
+Start playback in Spotify on a phone, desktop, or speaker first, then refresh the Kindle remote.
+
+`Premium required`
+
+Spotify playback-control endpoints generally require Spotify Premium.
+
+`Network blocked or Spotify unreachable`
+
+Check Kindle Wi-Fi, DNS filtering, router firewall rules, captive portals, and access to `accounts.spotify.com` and `api.spotify.com`.
+
+Native UI does not respond to touch
+
+Make sure you started `Touch Remote`, not `Now Playing Display`. The native UI prints the latest touch result as `Tap ... raw=x,y xy=x,y` or `Miss ... raw=x,y xy=x,y`. By default the app reads the touchscreen's kernel ABS min/max values from `/dev/input/event*`; this avoids assuming every Kindle uses `0..4095` raw touch coordinates. If normalized `xy` is still wrong, set `"touch_use_kernel_abs": false` and adjust `touch_min_*`, `touch_max_*`, `touch_swap_xy`, or `touch_invert_*` in `data/config.json`. If the UI rows are visually too high or too low, adjust `eips_row_height`, `button_top`, `button_height`, and `button_gap`.
+
+Default Paperwhite 11/PW5 calibration:
+
+```json
+{
+  "screen_width": 1236,
+  "screen_height": 1648,
+  "touch_min_x": 0,
+  "touch_max_x": 4095,
+  "touch_min_y": 0,
+  "touch_max_y": 4095,
+  "touch_use_kernel_abs": true,
+  "eips_col_width": 22,
+  "eips_row_height": 40,
+  "button_top": 660,
+  "button_height": 88,
+  "button_gap": 2
+}
+```
+
+Kindle UI does not return
+
+Run `Recover Kindle UI` from KUAL or execute:
+
+```sh
+sh /mnt/us/extensions/spotify-remote/recover.sh
+```
+
+## Security And Publishing Notes
+
+Do not publish local runtime data:
+
+- `extensions/spotify-remote/data/token.json`
+- `extensions/spotify-remote/data/config.json`
+- `extensions/spotify-remote/logs/`
+- generated ZIP files
+- built binaries
+
+Historical crash logs that are useful for debugging can be kept under `docs/crash-logs/`. Root-level ad hoc crash dumps are ignored until they are reviewed and moved there intentionally.
+
+If any token file was ever committed, rotate the Spotify authorization by deleting the token and logging in again. For a public repository, also rewrite Git history before publishing if sensitive data was committed in earlier commits.
+
+## Developer Workflow
+
+Recommended checks:
+
+```powershell
+git status --short
+python -m json.tool extensions\spotify-remote\menu.json > $null
+python -m json.tool extensions\spotifyremote\menu.json > $null
+cd extensions\spotify-remote
+.\build.ps1
+$env:GO111MODULE='off'; go test ./src/native
+```
+
+Project convention:
+
+- Commit each completed change separately.
+- Include the AI agent in the commit body, for example `Agent: codex`.
+
+## Status
+
+This project is functional but Kindle hardware behavior can vary by firmware. Real validation of touch input, `eips` rendering, and framework recovery must be done on the target Kindle.
