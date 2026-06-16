@@ -218,6 +218,10 @@ Wichtig fuer Wartung und Portierung:
 - Neue Kindle-Modelle koennen andere Event-Codes oder Achsenbereiche liefern.
 - Die UI sollte immer Tap-Diagnosen wie `raw=x,y xy=x,y` anzeigen oder loggen, damit Kalibrierung ohne Debugger moeglich bleibt.
 
+### TODO: Playlist-/Context-Name im freien UI-Bereich
+
+In der Native-FBInk-Ansicht soll spaeter im freien Bereich zwischen der `SHUF`/`REP`-Statuszeile und den Playback-Buttons der aktuelle Playlist- oder Playback-Context-Name angezeigt werden. Grundlage dafuer ist der `context` aus Spotifys Playback-State; bei Playlist-Kontext muss die App die Context-URI aufloesen und einen kurzen, e-ink-tauglichen Namen rendern. Wenn Spotify keinen Playlist-Kontext liefert, bleibt der Bereich leer oder zeigt einen kurzen neutralen Context-Hinweis.
+
 ### Cross-Compilation und Firmware-Unterschiede
 
 Der Gemini-Research weist auf Architekturunterschiede im Kindle-Oekosystem hin, besonders ARMv6/ARMv7 sowie Softfloat/Hardfloat bei neueren Firmwares. Fuer dieses Projekt ist das Risiko kleiner als bei C/C++-Programmen, weil die native App aktuell mit:

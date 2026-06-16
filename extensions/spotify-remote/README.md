@@ -122,6 +122,10 @@ Der Launcher bevorzugt `bin/spotify-remote-arm.new`, falls diese Datei vorhanden
 - Refresh alle 8 Sekunden
 - Klare Fehlertexte fuer Playback, Token, Premium, Netzwerk und aktive Geraete
 
+## TODO
+
+- In der Native-Anzeige den aktuellen Playlist- oder Playback-Context-Namen im freien Bereich zwischen `SHUF`/`REP` und den Playback-Buttons anzeigen.
+
 ## Troubleshooting
 
 `Failed to get playback state`: Spotify `/me/player` ist nicht erreichbar oder gibt keinen gueltigen Playback-State zurueck. Pruefe Login, Netzwerk und aktives Geraet.

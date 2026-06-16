@@ -218,6 +218,10 @@ Preferred flow:
 Volume can be adjusted with the centered `VOL-  xx%  VOL+` touch areas between the status row and playback controls.
 Shuffle and repeat can be toggled by tapping the `SHUF` and `REP` status labels. Repeat cycles through Spotify's `off`, `context`, and `track` modes.
 
+## TODO
+
+- Show the current playlist or playback context name in the free space above the playback buttons, between the shuffle/repeat row and the `|< PLAY >|` controls.
+
 Manual fallback:
 
 1. Run `Create Login URL` in KUAL.
