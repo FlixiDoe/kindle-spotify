@@ -36,6 +36,10 @@ Other Kindle models may need layout or touch-coordinate calibration in `extensio
 
 Detailed implementation notes live in `docs/PROJECT_DOCUMENTATION.md`. That document also includes a dedicated section named `Externe Research-Notizen von Gemini`, based on Gemini 3.1 Pro deep research about Kindle/KUAL app development. Those notes are treated as architecture input and are separated from verified project behavior.
 
+## Development Assistance
+
+Codex was used as the main coding agent for this project, including GPT-5.4 and GPT-5.5 based implementation passes. Gemini was used for external research on Kindle/KUAL development details.
+
 ## Repository Layout
 
 ```text

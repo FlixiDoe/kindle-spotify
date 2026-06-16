@@ -13,6 +13,12 @@ Das Projekt enthaelt zwei Bedienkonzepte:
 
 Zusaetzlich liegt noch eine Browser-basierte Web-Remote im Projekt, die ueber einen lokalen HTTP-Server auf `127.0.0.1:8787` laufen kann.
 
+## Entwicklungsunterstuetzung durch KI
+
+Codex wurde als Main Agent fuer die Implementierung und Projektpflege genutzt, insbesondere mit GPT-5.4 und GPT-5.5 basierten Arbeitslaeufen.
+
+Gemini wurde ergaenzend fuer externe Research-Arbeit genutzt, vor allem zu Kindle-, KUAL-, E-Ink-Rendering- und Cross-Compilation-Themen. Diese Research-Ergebnisse sind als Architektur-Input dokumentiert und werden von konkret verifiziertem Projektverhalten getrennt.
+
 ## Wichtige Pfade
 
 ```text
