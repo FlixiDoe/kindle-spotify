@@ -117,7 +117,7 @@ Der Launcher bevorzugt `bin/spotify-remote-arm.new`, falls diese Datei vorhanden
 - Lokale Token-Speicherung
 - Automatischer Refresh Token Flow
 - Aktueller Song: Titel, Kuenstler, Album, Fortschritt, Play/Pause, optional Cover
-- Controls: Play/Pause, Next, Previous, Volume +/-, Shuffle, Repeat
+- Controls: Play/Pause, Next, Previous, direkter Volume-Slider, Volume +/-, Shuffle, Repeat
 - Geraete anzeigen und aktives Geraet wechseln
 - Refresh alle 8 Sekunden
 - Klare Fehlertexte fuer Playback, Token, Premium, Netzwerk und aktive Geraete

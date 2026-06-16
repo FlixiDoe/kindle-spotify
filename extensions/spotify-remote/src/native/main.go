@@ -215,6 +215,15 @@ func (a *app) fbinkExitMessage() {
 }
 
 func (a *app) uiControl(action string) {
+	if strings.HasPrefix(action, "volume:") {
+		v, err := strconv.Atoi(strings.TrimPrefix(action, "volume:"))
+		if err != nil {
+			log.Printf("bad volume slider action: %s", action)
+			return
+		}
+		a.kualSetVolume(v)
+		return
+	}
 	switch action {
 	case "playpause":
 		a.kualPlayPause()
@@ -281,7 +290,8 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkText(4, 21, safe(albumName, 24))
 	a.fbinkText(4, 27, progress+"          "+duration)
 	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
-	a.fbinkText(3, 39, "VOL "+volume+"  SHUF "+shuffle+"  REP "+repeat)
+	a.fbinkText(3, 36, "VOL "+volumeBar(volume))
+	a.fbinkText(3, 39, "SHUF "+shuffle+"  REP "+repeat)
 	log.Printf("FBInk UI drawn: %s / %s", title, artist)
 }
 
@@ -494,6 +504,11 @@ func (a *app) queueUIAction(out chan<- string, rawX, rawY int, cal touchCalibrat
 		if nx >= zone.X1 && nx <= zone.X2 && ny >= zone.Y1 && ny <= zone.Y2 {
 			action = zone.Action
 			label = zone.Label
+			if action == "volume-slider" {
+				percent := clamp((nx-zone.X1)*100/(zone.X2-zone.X1), 0, 100)
+				action = "volume:" + strconv.Itoa(percent)
+				label = label + ":" + strconv.Itoa(percent)
+			}
 			break
 		}
 	}
@@ -509,6 +524,7 @@ func (a *app) queueUIAction(out chan<- string, rawX, rawY int, cal touchCalibrat
 
 func (a *app) fbinkTouchZones() []uiTouchZone {
 	return []uiTouchZone{
+		{Action: "volume-slider", Label: "volume-slider", X1: 160, Y1: 1030, X2: 1075, Y2: 1168},
 		{Action: "voldown", Label: "vol-down", X1: 120, Y1: 1110, X2: 610, Y2: 1235},
 		{Action: "volup", Label: "vol-up", X1: 626, Y1: 1110, X2: 1116, Y2: 1235},
 		{Action: "prev", Label: "prev", X1: 0, Y1: 1190, X2: 420, Y2: 1590},
@@ -808,6 +824,11 @@ func (a *app) kualVolume(delta int) {
 		return
 	}
 	v := clamp(p.Device.VolumePercent+delta, 0, 100)
+	a.kualControl(http.MethodPut, "https://api.spotify.com/v1/me/player/volume?volume_percent="+strconv.Itoa(v), nil, "Volume "+strconv.Itoa(v))
+}
+
+func (a *app) kualSetVolume(percent int) {
+	v := clamp(percent, 0, 100)
 	a.kualControl(http.MethodPut, "https://api.spotify.com/v1/me/player/volume?volume_percent="+strconv.Itoa(v), nil, "Volume "+strconv.Itoa(v))
 }
 
@@ -1588,6 +1609,30 @@ func fmtProgress(pos, total int) string {
 func fmtMS(ms int) string {
 	sec := ms / 1000
 	return fmt.Sprintf("%d:%02d", sec/60, sec%60)
+}
+
+func volumeBar(raw string) string {
+	v, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil {
+		return "[----------] ?"
+	}
+	v = clamp(v, 0, 100)
+	width := 10
+	filled := v * width / 100
+	var b strings.Builder
+	b.WriteByte('[')
+	for i := 0; i < width; i++ {
+		if i < filled {
+			b.WriteByte('=')
+		} else if i == filled && v < 100 {
+			b.WriteByte('|')
+		} else {
+			b.WriteByte('-')
+		}
+	}
+	b.WriteString("] ")
+	b.WriteString(strconv.Itoa(v))
+	return b.String()
 }
 
 func playText(v bool) string {
