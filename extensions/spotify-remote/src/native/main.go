@@ -25,10 +25,24 @@ import (
 const scopes = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
 
 type config struct {
-	ClientID   string `json:"client_id"`
-	Redirect   string `json:"redirect_uri"`
-	Port       int    `json:"port"`
-	RefreshSec int    `json:"refresh_seconds"`
+	ClientID      string `json:"client_id"`
+	Redirect      string `json:"redirect_uri"`
+	Port          int    `json:"port"`
+	RefreshSec    int    `json:"refresh_seconds"`
+	ScreenWidth   int    `json:"screen_width"`
+	ScreenHeight  int    `json:"screen_height"`
+	TouchMinX     int    `json:"touch_min_x"`
+	TouchMaxX     int    `json:"touch_max_x"`
+	TouchMinY     int    `json:"touch_min_y"`
+	TouchMaxY     int    `json:"touch_max_y"`
+	TouchSwapXY   bool   `json:"touch_swap_xy"`
+	TouchInvertX  bool   `json:"touch_invert_x"`
+	TouchInvertY  bool   `json:"touch_invert_y"`
+	EipsColWidth  int    `json:"eips_col_width"`
+	EipsRowHeight int    `json:"eips_row_height"`
+	ButtonTop     int    `json:"button_top"`
+	ButtonHeight  int    `json:"button_height"`
+	ButtonGap     int    `json:"button_gap"`
 }
 
 type tokenFile struct {
@@ -99,6 +113,7 @@ type app struct {
 	mu         sync.Mutex
 	lastDraw   time.Time
 	lastAction time.Time
+	lastTap    string
 	quit       chan struct{}
 }
 
@@ -477,8 +492,73 @@ func (a *app) setupLog() {
 }
 
 func (a *app) loadConfig() error {
-	a.cfg = config{Redirect: "http://127.0.0.1:8787/callback", Port: 8787, RefreshSec: 8}
-	return readJSON(filepath.Join(a.base, "data", "config.json"), &a.cfg)
+	a.cfg = defaultConfig()
+	err := readJSON(filepath.Join(a.base, "data", "config.json"), &a.cfg)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	a.normalizeConfig()
+	return err
+}
+
+func defaultConfig() config {
+	return config{
+		Redirect:      "http://127.0.0.1:8787/callback",
+		Port:          8787,
+		RefreshSec:    8,
+		ScreenWidth:   1236,
+		ScreenHeight:  1648,
+		TouchMinX:     0,
+		TouchMaxX:     4095,
+		TouchMinY:     0,
+		TouchMaxY:     4095,
+		EipsColWidth:  22,
+		EipsRowHeight: 40,
+		ButtonTop:     660,
+		ButtonHeight:  88,
+		ButtonGap:     2,
+	}
+}
+
+func (a *app) normalizeConfig() {
+	if a.cfg.Redirect == "" {
+		a.cfg.Redirect = "http://127.0.0.1:8787/callback"
+	}
+	if a.cfg.Port == 0 {
+		a.cfg.Port = 8787
+	}
+	if a.cfg.RefreshSec == 0 {
+		a.cfg.RefreshSec = 8
+	}
+	if a.cfg.ScreenWidth == 0 {
+		a.cfg.ScreenWidth = 1236
+	}
+	if a.cfg.ScreenHeight == 0 {
+		a.cfg.ScreenHeight = 1648
+	}
+	if a.cfg.TouchMaxX <= a.cfg.TouchMinX {
+		a.cfg.TouchMinX = 0
+		a.cfg.TouchMaxX = 4095
+	}
+	if a.cfg.TouchMaxY <= a.cfg.TouchMinY {
+		a.cfg.TouchMinY = 0
+		a.cfg.TouchMaxY = 4095
+	}
+	if a.cfg.EipsColWidth == 0 {
+		a.cfg.EipsColWidth = 22
+	}
+	if a.cfg.EipsRowHeight == 0 {
+		a.cfg.EipsRowHeight = 40
+	}
+	if a.cfg.ButtonTop == 0 {
+		a.cfg.ButtonTop = 660
+	}
+	if a.cfg.ButtonHeight == 0 {
+		a.cfg.ButtonHeight = 88
+	}
+	if a.cfg.ButtonGap == 0 {
+		a.cfg.ButtonGap = 2
+	}
 }
 
 func readJSON(path string, out any) error {
@@ -623,7 +703,7 @@ func (a *app) showDevices() {
 		}
 		devID := d.ID
 		eips(row, 0, safe(label, 55))
-		a.buttons = append(a.buttons, uiButton{Label: label, X1: 0, Y1: rowToY(row), X2: screenW, Y2: rowToY(row + 2), Do: func() {
+		a.buttons = append(a.buttons, uiButton{Label: label, X1: 0, Y1: a.rowToY(row), X2: a.cfg.ScreenWidth, Y2: a.rowToY(row + 2), Do: func() {
 			body := strings.NewReader(fmt.Sprintf(`{"device_ids":["%s"],"play":false}`, devID))
 			_, err := a.spotifyAPI(http.MethodPut, "https://api.spotify.com/v1/me/player", body, nil)
 			a.mu.Lock()
@@ -636,7 +716,7 @@ func (a *app) showDevices() {
 			a.refresh()
 		}})
 	}
-	a.buttons = append(a.buttons, uiButton{Label: "Back", X1: 880, Y1: 1440, X2: screenW, Y2: screenH, Do: func() { a.refresh() }})
+	a.buttons = append(a.buttons, uiButton{Label: "Back", X1: a.cfg.ScreenWidth * 7 / 10, Y1: a.cfg.ScreenHeight * 7 / 8, X2: a.cfg.ScreenWidth, Y2: a.cfg.ScreenHeight, Do: func() { a.refresh() }})
 	eips(38, 40, "Back")
 }
 
@@ -868,6 +948,9 @@ func (a *app) drawLocked() {
 		eips(row, 0, "No playback loaded.")
 		eips(row+1, 0, "Tap LOGIN first.")
 	}
+	if a.lastTap != "" {
+		eips(row+7, 0, safe(a.lastTap, 55))
+	}
 	a.buttons = []uiButton{
 		a.button(0, "PREVIOUS", func() { go a.control("prev") }),
 		a.button(1, "PLAY / PAUSE", func() { go a.control("playpause") }),
@@ -882,17 +965,16 @@ func (a *app) drawLocked() {
 		a.button(10, "QUIT", func() { go a.control("quit") }),
 	}
 	for i, b := range a.buttons {
-		r := yToRow(b.Y1)
+		r := a.yToRow(b.Y1)
 		eips(r, 0, "--------------------------------------------------------")
 		eips(r+1, 2, fmt.Sprintf("%02d  %s", i+1, b.Label))
 	}
 }
 
 func (a *app) button(slot int, label string, do func()) uiButton {
-	// PW5: screen is 1236x1648. Buttons start after the info area.
-	// Each button gets ~90px height for comfortable touch targets.
-	y1 := 660 + slot*90
-	return uiButton{Label: label, X1: 0, Y1: y1, X2: screenW, Y2: y1 + 88, Do: do}
+	step := a.cfg.ButtonHeight + a.cfg.ButtonGap
+	y1 := a.cfg.ButtonTop + slot*step
+	return uiButton{Label: label, X1: 0, Y1: y1, X2: a.cfg.ScreenWidth, Y2: y1 + a.cfg.ButtonHeight, Do: do}
 }
 
 func eipsClear() {
@@ -910,13 +992,6 @@ func openBrowser(raw string) {
 	_ = exec.Command("lipc-set-prop", "com.lab126.appmgrd", "start", "app://com.lab126.browser?url="+raw).Run()
 }
 
-// PW5 screen dimensions in pixels
-const (
-	screenW     = 1236
-	screenH     = 1648
-	touchMaxRaw = 4095 // capacitive touchscreen raw coordinate range
-)
-
 type inputEvent struct {
 	Sec   int32
 	Usec  int32
@@ -933,6 +1008,7 @@ func (a *app) touchLoop() {
 			if !opened[p] {
 				if _, err := os.Stat(p); err == nil {
 					opened[p] = true
+					log.Printf("opening input device %s", p)
 					go a.readInput(p)
 				}
 			}
@@ -993,7 +1069,7 @@ func (a *app) tap(rawX, rawY int) {
 		return
 	}
 	a.lastAction = time.Now()
-	x, y := normalizeTouch(rawX, rawY)
+	x, y := a.normalizeTouch(rawX, rawY)
 	log.Printf("tap raw=(%d,%d) normalized=(%d,%d)", rawX, rawY, x, y)
 	a.mu.Lock()
 	buttons := append([]uiButton(nil), a.buttons...)
@@ -1001,23 +1077,46 @@ func (a *app) tap(rawX, rawY int) {
 	for _, b := range buttons {
 		if x >= b.X1 && x <= b.X2 && y >= b.Y1 && y <= b.Y2 {
 			log.Printf("tap hit %s", b.Label)
+			a.setLastTap(fmt.Sprintf("Tap %s raw=%d,%d xy=%d,%d", b.Label, rawX, rawY, x, y), false)
 			b.Do()
 			return
 		}
 	}
 	log.Printf("tap missed at (%d,%d)", x, y)
+	a.setLastTap(fmt.Sprintf("Miss raw=%d,%d xy=%d,%d", rawX, rawY, x, y), true)
 }
 
-func normalizeTouch(x, y int) (int, int) {
-	// PW5 capacitive touch reports 0-4095 raw values.
-	// Always normalize to screen pixel coordinates.
-	if x > screenW {
-		x = x * screenW / touchMaxRaw
+func (a *app) setLastTap(msg string, redraw bool) {
+	a.mu.Lock()
+	a.lastTap = msg
+	if redraw {
+		a.lastDraw = time.Time{}
+		a.drawLocked()
 	}
-	if y > screenH {
-		y = y * screenH / touchMaxRaw
+	a.mu.Unlock()
+}
+
+func (a *app) normalizeTouch(rawX, rawY int) (int, int) {
+	x, y := rawX, rawY
+	if a.cfg.TouchSwapXY {
+		x, y = y, x
 	}
-	return clamp(x, 0, screenW), clamp(y, 0, screenH)
+	x = scaleTouchAxis(x, a.cfg.TouchMinX, a.cfg.TouchMaxX, a.cfg.ScreenWidth)
+	y = scaleTouchAxis(y, a.cfg.TouchMinY, a.cfg.TouchMaxY, a.cfg.ScreenHeight)
+	if a.cfg.TouchInvertX {
+		x = a.cfg.ScreenWidth - x
+	}
+	if a.cfg.TouchInvertY {
+		y = a.cfg.ScreenHeight - y
+	}
+	return clamp(x, 0, a.cfg.ScreenWidth), clamp(y, 0, a.cfg.ScreenHeight)
+}
+
+func scaleTouchAxis(v, rawMin, rawMax, screen int) int {
+	if rawMax <= rawMin {
+		return clamp(v, 0, screen)
+	}
+	return (v - rawMin) * screen / (rawMax - rawMin)
 }
 
 func validClientID(id string) bool {
@@ -1070,11 +1169,10 @@ func safe(s string, n int) string {
 	return string(r[:n-3]) + "..."
 }
 
-// PW5 eips character grid: ~22px per column, ~40px per row at default font
-func xToCol(x int) int { return x / 22 }
-func yToRow(y int) int { return y / 40 }
-func rowToY(row int) int {
-	return row * 40
+func (a *app) xToCol(x int) int { return x / a.cfg.EipsColWidth }
+func (a *app) yToRow(y int) int { return y / a.cfg.EipsRowHeight }
+func (a *app) rowToY(row int) int {
+	return row * a.cfg.EipsRowHeight
 }
 
 func clamp(v, lo, hi int) int {

@@ -89,7 +89,21 @@ http://127.0.0.1:8787/callback
   "redirect_uri": "http://127.0.0.1:8787/callback",
   "port": 8787,
   "refresh_seconds": 8,
-  "show_cover": true
+  "show_cover": true,
+  "screen_width": 1236,
+  "screen_height": 1648,
+  "touch_min_x": 0,
+  "touch_max_x": 4095,
+  "touch_min_y": 0,
+  "touch_max_y": 4095,
+  "touch_swap_xy": false,
+  "touch_invert_x": false,
+  "touch_invert_y": false,
+  "eips_col_width": 22,
+  "eips_row_height": 40,
+  "button_top": 660,
+  "button_height": 88,
+  "button_gap": 2
 }
 ```
 
@@ -208,7 +222,25 @@ Check Kindle Wi-Fi, DNS filtering, router firewall rules, captive portals, and a
 
 Native UI does not respond to touch
 
-Make sure you started `Touch Remote`, not `Now Playing Display`. If touch is still offset, recalibrate the screen and touch constants in `src/native/main.go`.
+Make sure you started `Touch Remote`, not `Now Playing Display`. The native UI prints the latest touch result as `Tap ... raw=x,y xy=x,y` or `Miss ... raw=x,y xy=x,y`. If the raw values change but normalized `xy` is wrong, adjust `touch_min_*`, `touch_max_*`, `touch_swap_xy`, or `touch_invert_*` in `data/config.json`. If the UI rows are visually too high or too low, adjust `eips_row_height`, `button_top`, `button_height`, and `button_gap`.
+
+Default Paperwhite 11/PW5 calibration:
+
+```json
+{
+  "screen_width": 1236,
+  "screen_height": 1648,
+  "touch_min_x": 0,
+  "touch_max_x": 4095,
+  "touch_min_y": 0,
+  "touch_max_y": 4095,
+  "eips_col_width": 22,
+  "eips_row_height": 40,
+  "button_top": 660,
+  "button_height": 88,
+  "button_gap": 2
+}
+```
 
 Kindle UI does not return
 

@@ -71,6 +71,29 @@ Der Ziel-Kindle ist ein Paperwhite 11. Generation. Die native App nimmt aktuell 
 
 Diese Werte stehen in `extensions/spotify-remote/src/native/main.go`. Wenn Touch-Treffer oder Skalierung auf deinem konkreten Geraet noch daneben liegen, ist das der erste Ort fuer Anpassungen.
 
+Die Werte koennen inzwischen ueber `extensions/spotify-remote/data/config.json` ueberschrieben werden:
+
+```json
+{
+  "screen_width": 1236,
+  "screen_height": 1648,
+  "touch_min_x": 0,
+  "touch_max_x": 4095,
+  "touch_min_y": 0,
+  "touch_max_y": 4095,
+  "touch_swap_xy": false,
+  "touch_invert_x": false,
+  "touch_invert_y": false,
+  "eips_col_width": 22,
+  "eips_row_height": 40,
+  "button_top": 660,
+  "button_height": 88,
+  "button_gap": 2
+}
+```
+
+Der wichtigste Fix fuer die Touch-Steuerung: Rohwerte werden nicht mehr nur dann skaliert, wenn sie groesser als die Bildschirmgroesse sind. Sie werden immer ueber `touch_min_*` bis `touch_max_*` in Bildschirmkoordinaten umgerechnet. Das ist wichtig, weil Kindle-Touchcontroller auch Rohwerte unterhalb der Displaybreite liefern koennen, die trotzdem aus einem 0..4095-Koordinatensystem stammen.
+
 ## Architektur
 
 ### Native Touch Remote
@@ -312,7 +335,22 @@ Pruefen:
 - Wurde `Touch Remote` gestartet und nicht `Now Playing Display`?
 - Ist `bin/spotify-remote-arm` ausfuehrbar?
 - Gibt es Eintraege in `logs/spotify-remote.log`?
-- Stimmen die Touch-Koordinaten in `src/native/main.go` fuer das Zielgeraet?
+- Zeigt die UI nach einem Tap `Tap ...` oder `Miss ...` an?
+- Stimmen `raw=x,y` und `xy=x,y` im letzten Tap-Hinweis?
+- Falls Rohwerte ankommen, aber `xy` falsch ist: `touch_min_*`, `touch_max_*`, `touch_swap_xy` und `touch_invert_*` in `data/config.json` anpassen.
+- Falls `xy` stimmt, aber die sichtbaren Zeilen verschoben sind: `eips_row_height`, `button_top`, `button_height` und `button_gap` anpassen.
+
+Interpretation der Touch-Diagnose:
+
+```text
+Tap PLAY / PAUSE raw=2048,3100 xy=618,1247
+Miss raw=800,1200 xy=241,482
+```
+
+- `raw` sind die Touchcontroller-Werte aus `/dev/input/event*`.
+- `xy` sind die normalisierten Bildschirmkoordinaten.
+- `Tap ...` bedeutet: ein Button-Hit wurde gefunden und die Aktion wurde ausgeloest.
+- `Miss ...` bedeutet: Touch kam an, lag nach Normalisierung aber ausserhalb aller Button-Flaechen.
 
 ### Kindle UI bleibt haengen
 
