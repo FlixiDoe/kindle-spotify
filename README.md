@@ -31,6 +31,10 @@ Other Kindle models may need layout or touch-coordinate calibration in `extensio
 ## Repository Layout
 
 ```text
+README.md                  Public project overview
+docs/
+  PROJECT_DOCUMENTATION.md Internal implementation and deployment notes
+  crash-logs/              Historical crash logs kept for debugging context
 extensions/spotify-remote/
   menu.json                 KUAL menu definition
   launch.sh                 Starts the native touch remote through run-native.sh
@@ -221,9 +225,10 @@ Do not publish local runtime data:
 - `extensions/spotify-remote/data/token.json`
 - `extensions/spotify-remote/data/config.json`
 - `extensions/spotify-remote/logs/`
-- `crash-log-*.log`
 - generated ZIP files
 - built binaries
+
+Historical crash logs that are useful for debugging can be kept under `docs/crash-logs/`. Root-level ad hoc crash dumps are ignored until they are reviewed and moved there intentionally.
 
 If any token file was ever committed, rotate the Spotify authorization by deleting the token and logging in again. For a public repository, also rewrite Git history before publishing if sensitive data was committed in earlier commits.
 

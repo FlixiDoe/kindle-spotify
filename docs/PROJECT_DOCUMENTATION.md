@@ -18,7 +18,11 @@ Zusaetzlich liegt noch eine Browser-basierte Web-Remote im Projekt, die ueber ei
 ```text
 .
   readme
-  PROJECT_DOCUMENTATION.md
+  docs/
+    PROJECT_DOCUMENTATION.md
+    crash-logs/
+      README.md
+      crash-log-*.log
   extensions/
     spotify-remote/
       menu.json
@@ -184,6 +188,16 @@ Wichtige Dateien:
 - `data/callback.txt`: manueller Login-Fallback fuer Redirect-URL oder Code.
 - `data/login_url.txt`: Login-URL fuer Login ueber anderes Geraet.
 
+## Crashlogs und lokale Daten
+
+Historische Crashlogs, die fuer Debugging relevant sind, liegen unter:
+
+```text
+docs/crash-logs/
+```
+
+Ad-hoc Crashlogs auf Repository-Root-Ebene bleiben ignoriert, bis sie geprueft und bewusst nach `docs/crash-logs/` verschoben werden.
+
 ## Lokale Daten und Sicherheit
 
 Diese Dateien enthalten lokale oder private Daten:
@@ -191,7 +205,6 @@ Diese Dateien enthalten lokale oder private Daten:
 - `extensions/spotify-remote/data/token.json`
 - `extensions/spotify-remote/data/config.json`
 - `extensions/spotify-remote/logs/spotify-remote.log`
-- `crash-log-*.log`
 
 `token.json` enthaelt Spotify-Zugriffsdaten. Diese Datei sollte nicht oeffentlich geteilt werden. Wenn das Repository irgendwann auf GitHub soll, sollten Token, Logs und personenbezogene Geraetedaten vorher entfernt oder in `.gitignore` ausgelagert werden.
 

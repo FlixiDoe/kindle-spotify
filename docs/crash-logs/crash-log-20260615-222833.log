@@ -1,0 +1,9 @@
+2026-06-15 22:24:01 Queueing native Spotify Remote launch
+2026-06-15 22:24:04 Stopping Kindle framework after launcher detach
+/mnt/us/extensions/spotify-remote/run-native.sh: line 19: /etc/init.d/framework: not found
+Terminated
+2026-06-15 22:24:05 Restarting Kindle framework
+/mnt/us/extensions/spotify-remote/run-native.sh: line 28: /etc/init.d/framework: not found
+framework start/running, process 6082
+2026-06-15 22:24:07 Running native binary
+2026/06/15 22:24:08 main.go:369: callback server on 127.0.0.1:8787
