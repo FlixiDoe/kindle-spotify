@@ -28,6 +28,10 @@ Current native assumptions:
 
 Other Kindle models may need layout or touch-coordinate calibration in `extensions/spotify-remote/src/native/main.go`.
 
+## Architecture Notes
+
+Detailed implementation notes live in `docs/PROJECT_DOCUMENTATION.md`. That document also includes a dedicated section named `Externe Research-Notizen von Gemini`, based on Gemini 3.1 Pro deep research about Kindle/KUAL app development. Those notes are treated as architecture input and are separated from verified project behavior.
+
 ## Repository Layout
 
 ```text

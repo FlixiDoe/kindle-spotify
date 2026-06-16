@@ -94,6 +94,157 @@ Die Werte koennen inzwischen ueber `extensions/spotify-remote/data/config.json` 
 
 Der wichtigste Fix fuer die Touch-Steuerung: Rohwerte werden nicht mehr nur dann skaliert, wenn sie groesser als die Bildschirmgroesse sind. Sie werden immer ueber `touch_min_*` bis `touch_max_*` in Bildschirmkoordinaten umgerechnet. Das ist wichtig, weil Kindle-Touchcontroller auch Rohwerte unterhalb der Displaybreite liefern koennen, die trotzdem aus einem 0..4095-Koordinatensystem stammen.
 
+## Externe Research-Notizen von Gemini
+
+Dieser Abschnitt basiert auf einem externen Deep-Research-Text von Gemini 3.1 Pro mit erweitertem Thinking zum Thema Kindle-App-Entwicklung, KUAL, MRPI, LIPC, E-Ink-Rendering und Cross-Compilation. Die Notizen sind als Architektur-Input zu verstehen, nicht als vollstaendig verifizierte Projektspezifikation. Konkrete Zahlen aus dem Research, etwa RAM-Verbrauch, Latenzen oder Batteriewerte, sollten vor einer technischen Entscheidung auf echter Kindle-Hardware nachgemessen werden.
+
+### Relevanz fuer dieses Projekt
+
+Der Research bestaetigt die grundlegende Richtung dieser App:
+
+- KUAL-Erweiterungen sollten klein bleiben und keinen permanenten Launcher-Daemon benoetigen.
+- Lang laufende Hintergrundprozesse, Polling-Schleifen und haeufiges Logging sind auf Kindle-Geraeten kritisch, weil RAM, CPU, Akku und eMMC-Flash begrenzt sind.
+- UI-Code sollte moeglichst direkt fuer E-Ink arbeiten. Browser- und High-Level-GUI-Stacks sind als Fallback nuetzlich, aber fuer eine robuste Vollbild-App schwerer kontrollierbar.
+- Direkte Framebuffer- oder Kindle-native Ausgabe muss mit dem Amazon-Framework koordiniert werden, weil dieses den Bildschirm sonst uebermalen kann.
+- Shell-Skripte, die Framework, Power-Management oder Displayzustand veraendern, muessen immer Recovery- und Cleanup-Pfade haben.
+
+Die aktuelle Projektarchitektur folgt diesen Punkten bereits teilweise:
+
+- Die Hauptbedienung liegt in einer kleinen nativen Go-Binary unter `src/native/main.go`.
+- KUAL startet die App ueber `menu.json -> launch.sh -> run-native.sh -> bin/spotify-remote-arm`.
+- `run-native.sh` setzt `preventScreenSaver`, stoppt das Kindle-Framework vor dem nativen Vollbildlauf und startet es beim Exit wieder.
+- `recover.sh` ist der manuelle Notfallpfad, falls die Kindle-Oberflaeche nicht automatisch zurueckkommt.
+- Die App liest Touch-Events direkt aus `/dev/input/event*` und normalisiert Rohkoordinaten ueber konfigurierbare Kalibrierungswerte.
+- OAuth nutzt PKCE ohne Client Secret, weil der Kindle-Speicher als user-zugaenglich behandelt werden muss.
+
+### KUAL- und Paketstruktur
+
+Der Gemini-Research beschreibt KUAL-Erweiterungen als dateibasierte Module unter:
+
+```text
+/mnt/us/extensions/<extension-name>/
+```
+
+Klassische KUAL-Erweiterungen bestehen aus einer `config.xml` fuer Metadaten und einer `menu.json` fuer Menuepunkte. Dieses Projekt verwendet aktuell die `menu.json` als relevante KUAL-Definition. Wenn eine Firmware oder KUAL-Variante die Extension nicht erkennt, ist eine minimale `config.xml` der naechste sinnvolle Kompatibilitaetsschritt.
+
+Wichtig fuer dieses Projekt:
+
+- Der Zielpfad bleibt `/mnt/us/extensions/spotify-remote`.
+- Die beiden Menue-Dateien `extensions/spotify-remote/menu.json` und `extensions/spotifyremote/menu.json` muessen synchron bleiben, solange beide Ordner im Repository existieren.
+- Menueeintraege sollten knapp bleiben. Hauefig genutzte Aktionen gehoeren in die native Touch-App; KUAL-Menuepunkte bleiben fuer Start, Recovery, Login-Fallbacks und direkte Notaktionen sinnvoll.
+
+### Framework- und Prozessmodell
+
+Der Research hebt hervor, dass KUAL-Skripte als Kindprozesse des Amazon-Frameworks laufen koennen. Wenn das Framework zu frueh oder im gleichen Prozessbaum gestoppt wird, kann das gestartete Skript mit beendet werden.
+
+Das Projekt loest das aktuell ueber einen zweistufigen Start:
+
+```text
+KUAL action -> launch.sh -> nohup sh run-native.sh -> native binary
+```
+
+`launch.sh` kehrt schnell zu KUAL zurueck, waehrend `run-native.sh` nach kurzer Wartezeit das Framework stoppt und die native App startet. Das entspricht dem Research-Prinzip der Prozessentkopplung. Falls auf einer Firmware trotzdem Prozessabbrueche auftreten, ist `setsid` als zusaetzliche Entkopplung in `launch.sh` oder `menu.json` zu pruefen.
+
+Jede Aenderung an Framework-Steuerung muss diese Cleanup-Regeln einhalten:
+
+- `preventScreenSaver` beim Start nur fuer aktive Vollbildsessions setzen.
+- `preventScreenSaver` beim Exit oder Recovery wieder auf `0` setzen.
+- Framework nach App-Ende wieder starten.
+- PID-Dateien und `/tmp/spotify-remote.framework-stopped` aufraeumen.
+- Keine kritischen Daemons wie Power-Management oder Netzwerk dauerhaft stoppen.
+
+### LIPC und Energiemanagement
+
+Gemini beschreibt LIPC als zentrale Kindle-Schnittstelle fuer Power-, Netzwerk- und UI-Dienste. Dieses Projekt nutzt LIPC aktuell bewusst schmal:
+
+```sh
+lipc-set-prop com.lab126.powerd preventScreenSaver 1
+lipc-set-prop com.lab126.powerd preventScreenSaver 0
+lipc-set-prop com.lab126.appmgrd start app://com.lab126.browser?url=...
+```
+
+Das ist fuer die Spotify-Remote angemessen. Weitere LIPC-Nutzung sollte nur hinzugefuegt werden, wenn sie einen klaren Zweck hat. Beispiele:
+
+- WLAN-Reconnect nur dann, wenn echte Kindle-Logs zeigen, dass Spotify-Requests nach Suspend regelmaessig scheitern.
+- RTC-Wakeup nur fuer ein spaeteres Always-On-Dashboard, nicht fuer die normale Touch-Remote.
+- `lipc-wait-event` nur, wenn eine Funktion wirklich eventgetrieben statt pollend laufen kann.
+
+Die aktive Touch-App darf alle paar Sekunden Spotify abfragen, weil sie eine Vordergrund-App ist. Die passive Anzeige sollte dagegen sparsam bleiben. Ein dauerhaftes Now-Playing-Dashboard sollte langfristig nicht mit engen `sleep`-Pollingzyklen laufen, sondern mit laengeren Intervallen, manueller Aktualisierung oder einem RTC-Wakeup-Design.
+
+### E-Ink-Rendering: eips und fbink
+
+Der Research empfiehlt `fbink` als robustere Framebuffer-Schicht fuer E-Ink. Dieses Projekt nutzt derzeit zwei Wege:
+
+- Native Touch-App: `eips`
+- Now Playing Display: bevorzugt `fbink`, mit Fallback ohne Zeichnung, wenn kein `fbink` gefunden wird
+
+`eips` ist auf Kindle-Geraeten naheliegend und fuer textbasierte Bedienung ausreichend. Es ist aber grob gerastert und bietet weniger Kontrolle ueber Refresh-Verhalten, Schriftgroesse, Bilder und partielles Rendering. `fbink` ist fuer eine bessere passive Anzeige und spaetere Cover-/Dashboard-Ansichten geeigneter.
+
+Praktische Regel:
+
+- Touch-Remote: `eips` behalten, solange Stabilitaet und Lesbarkeit wichtiger sind als visuelle Qualitaet.
+- Now Playing Display: `fbink` bevorzugen und dessen Vorhandensein sauber dokumentieren.
+- Keine Python/Pillow/PyQt-UI fuer die Haupt-App einfuehren, solange die App auf dem Kindle selbst laufen soll.
+
+### Touch- und Eingabemodell
+
+Der Research beschreibt die direkte Auswertung von Linux-`evdev`-Events. Genau das macht `src/native/main.go`.
+
+Wichtig fuer Wartung und Portierung:
+
+- Nicht annehmen, dass `/dev/input/event1` immer der Touchscreen ist.
+- Das aktuelle Scannen von `/dev/input/event0` bis `/dev/input/event11` ist bewusst defensiv.
+- Rohwerte muessen immer ueber `touch_min_*`, `touch_max_*`, `touch_swap_xy`, `touch_invert_x` und `touch_invert_y` kalibrierbar bleiben.
+- Neue Kindle-Modelle koennen andere Event-Codes oder Achsenbereiche liefern.
+- Die UI sollte immer Tap-Diagnosen wie `raw=x,y xy=x,y` anzeigen oder loggen, damit Kalibrierung ohne Debugger moeglich bleibt.
+
+### Cross-Compilation und Firmware-Unterschiede
+
+Der Gemini-Research weist auf Architekturunterschiede im Kindle-Oekosystem hin, besonders ARMv6/ARMv7 sowie Softfloat/Hardfloat bei neueren Firmwares. Fuer dieses Projekt ist das Risiko kleiner als bei C/C++-Programmen, weil die native App aktuell mit:
+
+```text
+GOOS=linux
+GOARCH=arm
+GOARM=7
+CGO_ENABLED=0
+```
+
+gebaut wird. `CGO_ENABLED=0` vermeidet dynamische Abhaengigkeiten gegen Kindle-Systembibliotheken weitgehend.
+
+Trotzdem gelten diese Regeln:
+
+- `GOARM=7` ist der Standard fuer PW5-nahe Geraete.
+- `GOARM=6` ist der erste Fallback fuer aeltere Kindle-Modelle.
+- Keine CGO-Abhaengigkeiten einfuehren, solange sie nicht zwingend notwendig sind.
+- Wenn native C-Tools wie `fbink`, `jq` oder `curl` gebuendelt werden, muessen sie fuer das passende Kindle-Ziel gebaut oder aus vertrauenswuerdigen Kindle-Paketen uebernommen werden.
+- Firmware `>= 5.16.3` kann Hardfloat-spezifische Probleme bei externen Binaries verursachen; reine Go-Binaries ohne CGO sind weniger anfaellig, aber reale Tests bleiben notwendig.
+
+### Logging, Flash-Schreibzugriffe und lokale Daten
+
+Der Research warnt vor haeufigem Schreiben auf den internen Flash. Dieses Projekt schreibt Logs nach:
+
+```text
+extensions/spotify-remote/logs/spotify-remote.log
+```
+
+Das ist fuer Debugging hilfreich, sollte aber nicht unkontrolliert wachsen.
+
+Empfohlene Regeln:
+
+- Logs fuer reale Kindle-Tests kurz halten und nach Fehleranalyse loeschen oder gezielt nach `docs/crash-logs/` uebernehmen.
+- Keine hochfrequenten Debug-Logs in Touch- oder Refresh-Schleifen dauerhaft aktiv lassen.
+- Tokens, lokale Configs und Runtime-Logs nicht committen.
+- Temporare Dateien bevorzugt in `data/` oder `/tmp` halten, je nach Lebensdauer und Recovery-Bedarf.
+
+### Research-Input, der nicht blind uebernommen wird
+
+Einige Aussagen aus dem Gemini-Text sind als Richtung plausibel, aber fuer dieses Projekt nicht direkt belastbar:
+
+- Exakte RAM-, Latenz-, Batterieverbrauchs- und Fragmentierungszahlen werden nicht als Projektfakten dokumentiert, solange sie nicht auf dem Ziel-Kindle gemessen wurden.
+- Aussagen zu spezifischen Hotfix-Interna, MKK-Keys, `gandalf` oder `appreg.db` sind fuer diese App nicht notwendig und werden nicht als Voraussetzung aufgenommen.
+- Always-On-RTC-Wakeup-Design ist fuer eine Spotify-Fernbedienung aktuell Overengineering. Es wird erst relevant, wenn das Projekt zu einem dauerhaft laufenden Dashboard ausgebaut wird.
+- Eine vollstaendige Abkehr von `eips` ist nicht erforderlich. `fbink` ist ein guter Ausbaupfad, aber keine harte Voraussetzung fuer die aktuelle Touch-Remote.
+
 ## Architektur
 
 ### Native Touch Remote
