@@ -297,8 +297,21 @@ func (a *app) fbinkText(size, row int, text string) {
 
 func (a *app) fbinkImage(path string) {
 	if p := a.fbinkPath(); p != "" {
-		spec := fmt.Sprintf("file=%s,halign=CENTER,valign=TOP,x=0,y=105,w=460,h=460,dither,flatten", path)
-		_ = exec.Command(p, "-q", "-g", spec).Run()
+		attempts := [][]string{
+			{"-q", "-g", fmt.Sprintf("file=%s,halign=CENTER,valign=TOP,x=0,y=105,w=460,h=460,dither,flatten", path)},
+			{"-q", "-g", fmt.Sprintf("file=%s,x=0,y=105,w=460,h=460,dither,flatten", path)},
+			{"-q", "-g", path},
+			{"-q", "-i", path},
+		}
+		for i, args := range attempts {
+			cmd := exec.Command(p, args...)
+			out, err := cmd.CombinedOutput()
+			if err == nil {
+				log.Printf("fbink image render ok via attempt %d args=%v", i+1, args)
+				return
+			}
+			log.Printf("fbink image render failed attempt %d args=%v err=%v out=%s", i+1, args, err, strings.TrimSpace(string(out)))
+		}
 	}
 }
 
