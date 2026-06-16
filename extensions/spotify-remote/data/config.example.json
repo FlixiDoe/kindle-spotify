@@ -1,0 +1,7 @@
+{
+  "client_id": "PASTE_SPOTIFY_CLIENT_ID_HERE",
+  "redirect_uri": "http://127.0.0.1:8787/callback",
+  "port": 8787,
+  "refresh_seconds": 8,
+  "show_cover": true
+}

@@ -2,13 +2,9 @@
 
 ## Zweck
 
-Dieses Projekt ist eine KUAL-Extension fuer einen jailbroken Kindle, die Spotify vom Kindle aus anzeigen und steuern kann. Die App richtet sich auf dein Zielgeraet:
+Dieses Projekt ist eine KUAL-Extension fuer einen jailbroken Kindle, die Spotify vom Kindle aus anzeigen und steuern kann. Die App richtet sich auf Kindle Paperwhite 11. Generation / PW5 Geraete.
 
-- Besitzer/Name: Felix Kindle Paperwhite 11. Generation
-- Send-to-Kindle E-Mail: Felixdoernchen.kindle@kindle.com
-- Typ: Kindle Paperwhite (11. Generation)
-- Seriennummer: G001PX111483050T
-- Registriert am: 12. April 2025
+Private Geraetedaten wie Seriennummern, persoenliche E-Mail-Adressen und Registrierungsdaten gehoeren nicht in ein oeffentliches Repository. Fuer lokale Deployments koennen solche Daten in privaten Notizen ausserhalb von Git abgelegt werden.
 
 Das Projekt enthaelt zwei Bedienkonzepte:
 
@@ -23,9 +19,6 @@ Zusaetzlich liegt noch eine Browser-basierte Web-Remote im Projekt, die ueber ei
 .
   readme
   PROJECT_DOCUMENTATION.md
-  spotify-remote-kual.zip
-  spotify-remote-native-kual.zip
-  crash-log-*.log
   extensions/
     spotify-remote/
       menu.json
@@ -40,12 +33,8 @@ Zusaetzlich liegt noch eine Browser-basierte Web-Remote im Projekt, die ueber ei
       build.sh
       build.ps1
       README.md
-      bin/
-        spotify-remote-arm
       data/
-        config.json
-        token.json
-        status.txt
+        config.example.json
       logs/
         spotify-remote.log
       src/
@@ -261,7 +250,7 @@ Compress-Archive -Path extensions\spotify-remote -DestinationPath spotify-remote
 
 Die beiden ZIPs enthalten aktuell denselben Extension-Ordner. Wenn nur ein Paket gebraucht wird, reicht `spotify-remote-kual.zip`.
 
-## Installation auf Felix Kindle
+## Installation auf dem Kindle
 
 1. Kindle per USB verbinden.
 2. Den Ordner `extensions/spotify-remote` oder den ZIP-Inhalt nach `/mnt/us/extensions/spotify-remote` kopieren.
@@ -365,4 +354,4 @@ $env:GO111MODULE='off'; go test ./src/native
 - Der Kindle Experimental Browser ist alt und fuer OAuth nicht immer verlaesslich.
 - Die native App greift direkt auf `/dev/input/event*` zu; Kindle-Firmware-Unterschiede koennen Event-Codes oder Rohwerte beeinflussen.
 - `eips`-Rendering ist geraete- und firmwareabhaengig.
-- In diesem Repository liegen aktuell lokale Daten und Tokens. Nicht unveraendert veroeffentlichen.
+- Lokale Daten, Tokens, Logs, ZIPs und Binaries sollen nicht veroeffentlicht werden. Die `.gitignore` schliesst diese Artefakte fuer neue Aenderungen aus.

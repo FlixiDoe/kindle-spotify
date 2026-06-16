@@ -1,5 +1,5 @@
 Start here:
 
-- Projektueberblick: PROJECT_DOCUMENTATION.md
-- Extension-Doku: extensions/spotify-remote/README.md
-- Kindle-Zielgeraet: Felix Kindle Paperwhite 11. Generation
+- Public README: README.md
+- Internal project notes: PROJECT_DOCUMENTATION.md
+- Extension notes: extensions/spotify-remote/README.md

@@ -1,8 +1,0 @@
-2026-06-15 22:19:04 Starting native Spotify Remote
-2026-06-15 22:19:04 Stopping Kindle framework to avoid eips redraw conflict
-/mnt/us/extensions/spotify-remote/start.sh: line 17: /etc/init.d/framework: not found
-Terminated
-2026-06-15 22:19:06 Restarting Kindle framework
-/mnt/us/extensions/spotify-remote/start.sh: line 26: /etc/init.d/framework: not found
-framework start/running, process 8269
-2026/06/15 22:19:09 main.go:369: callback server on 127.0.0.1:8787

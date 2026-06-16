@@ -1,0 +1,19 @@
+# Local Spotify OAuth/runtime data
+extensions/spotify-remote/data/config.json
+extensions/spotify-remote/data/token.json
+extensions/spotify-remote/data/oauth.json
+extensions/spotify-remote/data/callback.txt
+extensions/spotify-remote/data/login_url.txt
+extensions/spotify-remote/data/status.txt
+
+# Logs and crash dumps
+extensions/spotify-remote/logs/
+crash-log-*.log
+
+# Build and release artifacts
+extensions/spotify-remote/bin/
+*.zip
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
