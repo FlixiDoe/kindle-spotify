@@ -66,8 +66,15 @@ type artist struct {
 	Name string `json:"name"`
 }
 
+type albumImage struct {
+	URL    string `json:"url"`
+	Height int    `json:"height"`
+	Width  int    `json:"width"`
+}
+
 type album struct {
-	Name string `json:"name"`
+	Name   string       `json:"name"`
+	Images []albumImage `json:"images"`
 }
 
 type track struct {
@@ -207,6 +214,7 @@ func (a *app) drawFBInkNowPlaying() {
 	shuffle := "?"
 	repeat := "off"
 	playIcon := "PLAY"
+	coverPath := ""
 	if err != nil {
 		artist = "Failed to get playback state"
 		albumName = err.Error()
@@ -221,6 +229,7 @@ func (a *app) drawFBInkNowPlaying() {
 		volume = strconv.Itoa(p.Device.VolumePercent)
 		shuffle = strconv.FormatBool(p.Shuffle)
 		repeat = p.Repeat
+		coverPath = a.prepareCover(p.CurrentTrack.Album.Images)
 		if p.IsPlaying {
 			state = "NOW PLAYING"
 			playIcon = "PAUSE"
@@ -234,9 +243,14 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkText(4, 1, "SPOTIFY REMOTE")
 	a.fbinkText(4, 4, "+====================+")
 	a.fbinkText(4, 5, "|                    |")
-	a.fbinkText(4, 6, "|    ALBUM COVER     |")
+	a.fbinkText(4, 6, "|                    |")
 	a.fbinkText(4, 7, "|                    |")
 	a.fbinkText(4, 8, "+====================+")
+	if coverPath != "" {
+		a.fbinkImage(coverPath)
+	} else {
+		a.fbinkText(4, 6, "|    ALBUM COVER     |")
+	}
 	a.fbinkText(4, 11, state)
 	a.fbinkText(6, 13, safe(title, 18))
 	a.fbinkText(4, 18, safe(artist, 24))
@@ -268,6 +282,50 @@ func (a *app) fbinkText(size, row int, text string) {
 	if p := a.fbinkPath(); p != "" {
 		_ = exec.Command(p, "-q", "-S", strconv.Itoa(size), "-m", "-y", strconv.Itoa(row), text).Run()
 	}
+}
+
+func (a *app) fbinkImage(path string) {
+	if p := a.fbinkPath(); p != "" {
+		spec := fmt.Sprintf("file=%s,halign=CENTER,valign=TOP,x=0,y=120,w=420,h=420,dither", path)
+		_ = exec.Command(p, "-q", "-g", spec).Run()
+	}
+}
+
+func (a *app) prepareCover(images []albumImage) string {
+	if len(images) == 0 {
+		return ""
+	}
+	best := images[len(images)-1]
+	for _, img := range images {
+		if img.Width >= best.Width {
+			best = img
+		}
+	}
+	if best.URL == "" {
+		return ""
+	}
+	resp, err := a.client.Get(best.URL)
+	if err != nil {
+		log.Printf("cover download failed: %v", err)
+		return ""
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("cover download bad status: %d", resp.StatusCode)
+		return ""
+	}
+	coverPath := filepath.Join(a.base, "data", "cover.jpg")
+	f, err := os.Create(coverPath)
+	if err != nil {
+		log.Printf("cover create failed: %v", err)
+		return ""
+	}
+	defer f.Close()
+	if _, err := io.Copy(f, io.LimitReader(resp.Body, 1024*1024)); err != nil {
+		log.Printf("cover write failed: %v", err)
+		return ""
+	}
+	return coverPath
 }
 
 func (a *app) grabTouchLoop(out chan<- string, done <-chan struct{}) {
@@ -302,7 +360,13 @@ func ioctlGrab(f *os.File, grab bool) error {
 func (a *app) readGrabbedTouch(f *os.File, out chan<- string, done <-chan struct{}) {
 	defer f.Close()
 	defer ioctlGrab(f, false)
+	cal := a.touchCalibration(f, f.Name())
 	var x, y int
+	var hasCoords bool
+	var touching bool
+	var sawTouchKey bool
+	var sawTrackingID bool
+	var pendingRelease bool
 	for {
 		select {
 		case <-done:
@@ -315,41 +379,78 @@ func (a *app) readGrabbedTouch(f *os.File, out chan<- string, done <-chan struct
 			return
 		}
 		switch ev.Type {
-		case 3:
-			if ev.Code == 0 || ev.Code == 0x35 {
+		case 3: // EV_ABS
+			switch ev.Code {
+			case 0x00, 0x35:
 				x = int(ev.Value)
-			}
-			if ev.Code == 1 || ev.Code == 0x36 {
+				hasCoords = true
+			case 0x01, 0x36:
 				y = int(ev.Value)
+				hasCoords = true
+			case 0x39:
+				sawTrackingID = true
+				if ev.Value >= 0 {
+					touching = true
+					pendingRelease = false
+				} else {
+					touching = false
+					pendingRelease = true
+				}
 			}
-		case 1:
-			if ev.Code == 0x14a && ev.Value == 0 {
-				nx, ny := normalizeTouch(x, y)
-				log.Printf("UI tap raw=(%d,%d) normalized=(%d,%d)", x, y, nx, ny)
-				action := "playpause"
-				if ny > 1250 {
-					action = "quit"
-				} else if ny > 850 {
-					if nx < 360 {
-						action = "prev"
-					} else if nx > 720 {
-						action = "next"
-					} else {
-						action = "playpause"
-					}
-				} else if ny > 650 {
-					if nx < 536 {
-						action = "voldown"
-					} else {
-						action = "volup"
-					}
+		case 1: // EV_KEY
+			switch ev.Code {
+			case 0x14a, 0x145:
+				sawTouchKey = true
+				if ev.Value == 1 {
+					touching = true
+					pendingRelease = false
+				} else if ev.Value == 0 {
+					touching = false
+					pendingRelease = true
 				}
-				select {
-				case out <- action:
-				default:
-				}
+			}
+		case 0: // EV_SYN
+			if ev.Code != 0 {
+				continue
+			}
+			if pendingRelease && hasCoords {
+				a.queueUIAction(out, x, y, cal)
+				hasCoords = false
+				pendingRelease = false
+				continue
+			}
+			if !touching && !sawTouchKey && !sawTrackingID && hasCoords {
+				a.queueUIAction(out, x, y, cal)
+				hasCoords = false
 			}
 		}
+	}
+}
+
+func (a *app) queueUIAction(out chan<- string, rawX, rawY int, cal touchCalibration) {
+	nx, ny := a.normalizeTouch(rawX, rawY, cal)
+	log.Printf("UI tap raw=(%d,%d) normalized=(%d,%d) calibration=%s", rawX, rawY, nx, ny, cal.Source)
+	action := "playpause"
+	if ny > 1250 {
+		action = "quit"
+	} else if ny > 850 {
+		if nx < 360 {
+			action = "prev"
+		} else if nx > 720 {
+			action = "next"
+		} else {
+			action = "playpause"
+		}
+	} else if ny > 650 {
+		if nx < 536 {
+			action = "voldown"
+		} else {
+			action = "volup"
+		}
+	}
+	select {
+	case out <- action:
+	default:
 	}
 }
 
