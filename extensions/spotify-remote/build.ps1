@@ -2,6 +2,18 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $outDir = Join-Path $root "bin"
 $out = Join-Path $outDir "spotify-remote-arm"
+$goExe = $env:GOEXE
+
+if (!$goExe) {
+  $goCommand = Get-Command go -ErrorAction SilentlyContinue
+  if ($goCommand) {
+    $goExe = $goCommand.Source
+  }
+}
+
+if (!$goExe) {
+  throw "Go toolchain not found. Install Go, add it to PATH, or set GOEXE to the full go.exe path."
+}
 
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 Push-Location $root
@@ -12,7 +24,7 @@ try {
   $env:GOOS = "linux"
   $env:GOARCH = "arm"
   $env:GOARM = "7"
-  go build -trimpath -ldflags "-s -w" -o $out ".\src\native"
+  & $goExe build -trimpath -ldflags "-s -w" -o $out ".\src\native"
 
   Write-Host "Built $out"
   Write-Host "On Kindle, ensure executable bit if needed: chmod 755 extensions/spotify-remote/bin/spotify-remote-arm"

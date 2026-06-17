@@ -110,6 +110,7 @@ function renderState(state) {
     el("artist").textContent = "Start playback in Spotify on another device.";
     el("album").textContent = "";
     el("time").textContent = "0:00 / 0:00";
+    el("device").textContent = "";
     el("bar").style.width = "0%";
     el("cover").removeAttribute("src");
     return;
@@ -119,6 +120,7 @@ function renderState(state) {
   el("artist").textContent = (state.item.artists || []).map(function(a) { return a.name; }).join(", ");
   el("album").textContent = state.item.album ? state.item.album.name : "";
   el("time").textContent = fmt(state.progress_ms) + " / " + fmt(state.item.duration_ms);
+  el("device").textContent = state.device && state.device.name ? "Device: " + state.device.name : "";
   el("bar").style.width = Math.max(0, Math.min(100, (state.progress_ms || 0) * 100 / (state.item.duration_ms || 1))) + "%";
   el("playBtn").textContent = state.is_playing ? "Pause" : "Play";
   el("shuffleBtn").textContent = state.shuffle_state ? "Shuffle On" : "Shuffle Off";

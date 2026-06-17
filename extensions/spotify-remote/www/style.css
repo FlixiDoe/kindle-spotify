@@ -107,7 +107,7 @@ button:active {
   overflow-wrap: anywhere;
 }
 
-.artist, .album, .time {
+.artist, .album, .time, .device {
   margin-top: 6px;
   overflow-wrap: anywhere;
 }
