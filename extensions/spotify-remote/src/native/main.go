@@ -254,6 +254,7 @@ func (a *app) drawFBInkNowPlaying() {
 	contextLabel := ""
 	playIcon := "PLAY"
 	coverPath := ""
+	deviceName := ""
 	if err != nil {
 		artist = "Failed to get playback state"
 		albumName = err.Error()
@@ -268,6 +269,7 @@ func (a *app) drawFBInkNowPlaying() {
 		volume = strconv.Itoa(p.Device.VolumePercent)
 		shuffle = strconv.FormatBool(p.Shuffle)
 		repeat = p.Repeat
+		deviceName = p.Device.Name
 		contextLabel = a.playbackContextLabel(p)
 		if contextLabel != "" {
 			albumName = contextLabel
@@ -299,6 +301,9 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
 	a.fbinkText(4, 35, "VOL-  "+volume+"%  VOL+")
 	a.fbinkText(3, 39, "SHUF "+shuffle+"  REP "+repeat)
+	if deviceName != "" {
+		a.fbinkText(3, 43, safe("DEV: "+deviceName, 35))
+	}
 	log.Printf("FBInk UI drawn: %s / %s / %s", title, artist, contextLabel)
 }
 
@@ -1473,6 +1478,7 @@ func (a *app) drawLocked() {
 		eips(row+2, 0, safe(a.state.CurrentTrack.Album.Name, 55))
 		eips(row+4, 0, fmt.Sprintf("%s  %s  Vol %d", playText(a.state.IsPlaying), fmtProgress(a.state.ProgressMS, a.state.CurrentTrack.DurationMS), a.state.Device.VolumePercent))
 		eips(row+5, 0, fmt.Sprintf("Shuffle %v  Repeat %s", a.state.Shuffle, a.state.Repeat))
+		eips(row+6, 0, safe("Device: "+a.state.Device.Name, 55))
 	} else {
 		eips(row, 0, "No playback loaded.")
 		eips(row+1, 0, "Tap LOGIN first.")
