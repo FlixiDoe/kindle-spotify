@@ -92,7 +92,7 @@ Reference starting points:
 
 Done:
 
-- The native FBInk now-playing view shows the current Spotify playback context in the free zone above the playback controls when Spotify provides context data. It resolves `context.href` to a display name where possible and falls back to a short Spotify URI identifier.
+- The native FBInk now-playing view keeps the stable main layout and uses the third track-info row for Spotify playback context when Spotify provides it. It resolves `context.href` to a display name where possible, falls back to a short Spotify URI identifier, and avoids emoji-only names that FBInk would render as an empty label.
 
 ## Maintenance Checklist
 

@@ -38,6 +38,8 @@ Direct control and recovery scripts remain in this folder for maintenance, but a
 
 The `nowplaying-*.sh` scripts are legacy passive-display helpers. They should not be wired to the normal KUAL start item because they do not run the native FBInk UI.
 
+The native now-playing view keeps the original Kindle layout. The third track-info row shows the album by default and switches to the active Spotify context when available, for example `Playlist: <name>`, `Playlist: <id>`, or `Liked Songs`. Playlist names require the playlist read OAuth scopes; emoji-only names fall back to the Spotify playlist ID because FBInk cannot render them visibly.
+
 ## Local Files
 
 Runtime files are created locally on the Kindle and are ignored by Git:
