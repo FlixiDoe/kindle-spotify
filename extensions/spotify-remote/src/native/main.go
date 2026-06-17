@@ -19,12 +19,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
 const (
-	scopes                     = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+	scopes                     = "user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private playlist-read-collaborative"
 	placeholderSpotifyClientID = "PASTE_SPOTIFY_CLIENT_ID_HERE"
 )
 
@@ -95,13 +94,21 @@ type device struct {
 	VolumePercent int    `json:"volume_percent"`
 }
 
+type playbackContext struct {
+	Type         string            `json:"type"`
+	Href         string            `json:"href"`
+	URI          string            `json:"uri"`
+	ExternalURLs map[string]string `json:"external_urls"`
+}
+
 type playback struct {
-	Device       device `json:"device"`
-	Shuffle      bool   `json:"shuffle_state"`
-	Repeat       string `json:"repeat_state"`
-	ProgressMS   int    `json:"progress_ms"`
-	IsPlaying    bool   `json:"is_playing"`
-	CurrentTrack track  `json:"item"`
+	Device       device          `json:"device"`
+	Shuffle      bool            `json:"shuffle_state"`
+	Repeat       string          `json:"repeat_state"`
+	ProgressMS   int             `json:"progress_ms"`
+	IsPlaying    bool            `json:"is_playing"`
+	CurrentTrack track           `json:"item"`
+	Context      playbackContext `json:"context"`
 }
 
 type uiButton struct {
@@ -244,6 +251,7 @@ func (a *app) drawFBInkNowPlaying() {
 	volume := "?"
 	shuffle := "?"
 	repeat := "off"
+	contextLabel := ""
 	playIcon := "PLAY"
 	coverPath := ""
 	if err != nil {
@@ -260,6 +268,10 @@ func (a *app) drawFBInkNowPlaying() {
 		volume = strconv.Itoa(p.Device.VolumePercent)
 		shuffle = strconv.FormatBool(p.Shuffle)
 		repeat = p.Repeat
+		contextLabel = a.playbackContextLabel(p)
+		if contextLabel != "" {
+			albumName = contextLabel
+		}
 		coverPath = a.prepareCover(p.CurrentTrack.Album.Images)
 		if p.IsPlaying {
 			playIcon = "PAUSE"
@@ -287,7 +299,141 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
 	a.fbinkText(4, 35, "VOL-  "+volume+"%  VOL+")
 	a.fbinkText(3, 39, "SHUF "+shuffle+"  REP "+repeat)
-	log.Printf("FBInk UI drawn: %s / %s", title, artist)
+	log.Printf("FBInk UI drawn: %s / %s / %s", title, artist, contextLabel)
+}
+
+func (a *app) playbackContextLabel(p playback) string {
+	ctx := p.Context
+	if ctx.Type == "" && ctx.URI == "" && ctx.Href == "" && len(ctx.ExternalURLs) == 0 {
+		return ""
+	}
+	if ctx.Type == "collection" {
+		return "Liked Songs"
+	}
+	prefix := contextPrefix(ctx.Type)
+	ref := contextRef(ctx)
+	if ctx.Href != "" {
+		if name := a.spotifyResourceName(ctx.Href); name != "" {
+			return contextDisplay(prefix, name, ref)
+		}
+	}
+	if ref != "" {
+		return prefix + ": " + ref
+	}
+	if strings.EqualFold(ctx.Type, "playlist") && !a.hasTokenScopes("playlist-read-private", "playlist-read-collaborative") {
+		return "Login for Playlist"
+	}
+	return prefix + ": unavailable"
+}
+
+func contextDisplay(prefix, name, fallback string) string {
+	name = strings.TrimSpace(name)
+	if kindleVisible(name) {
+		return prefix + ": " + name
+	}
+	if fallback != "" {
+		return prefix + ": " + fallback
+	}
+	return prefix + ": unavailable"
+}
+
+func kindleVisible(s string) bool {
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			return true
+		}
+		if r >= 'A' && r <= 'Z' {
+			return true
+		}
+		if r >= 'a' && r <= 'z' {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *app) spotifyResourceName(endpoint string) string {
+	var out struct {
+		Name string `json:"name"`
+	}
+	_, err := a.spotifyAPI(http.MethodGet, endpoint, nil, &out)
+	if err != nil {
+		log.Printf("context name lookup failed for %s: %v", endpoint, err)
+		return ""
+	}
+	return strings.TrimSpace(out.Name)
+}
+
+func contextPrefix(contextType string) string {
+	switch strings.ToLower(contextType) {
+	case "playlist":
+		return "Playlist"
+	case "album":
+		return "Album"
+	case "artist":
+		return "Artist"
+	case "collection":
+		return "Context"
+	default:
+		if contextType == "" {
+			return "Context"
+		}
+		return strings.ToUpper(contextType[:1]) + contextType[1:]
+	}
+}
+
+func shortSpotifyURI(uri string) string {
+	parts := strings.Split(uri, ":")
+	if len(parts) == 0 {
+		return uri
+	}
+	return parts[len(parts)-1]
+}
+
+func shortSpotifyRef(raw string) string {
+	if strings.HasPrefix(raw, "spotify:") {
+		return shortSpotifyURI(raw)
+	}
+	u, err := url.Parse(raw)
+	if err == nil {
+		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+		for i := len(parts) - 1; i >= 0; i-- {
+			if parts[i] != "" {
+				return parts[i]
+			}
+		}
+	}
+	return strings.TrimSpace(raw)
+}
+
+func contextRef(ctx playbackContext) string {
+	if ctx.URI != "" {
+		return shortSpotifyURI(ctx.URI)
+	}
+	if ctx.Href != "" {
+		return shortSpotifyRef(ctx.Href)
+	}
+	if raw := strings.TrimSpace(ctx.ExternalURLs["spotify"]); raw != "" {
+		return shortSpotifyRef(raw)
+	}
+	return ""
+}
+
+func (a *app) hasTokenScopes(required ...string) bool {
+	tok, err := a.loadToken()
+	if err != nil {
+		return false
+	}
+	scopes := map[string]bool{}
+	for _, s := range strings.Fields(tok.Scope) {
+		scopes[s] = true
+	}
+	for _, s := range required {
+		if !scopes[s] {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *app) fbinkPath() string {
@@ -407,18 +553,6 @@ func (a *app) grabTouchLoop(out chan<- string, done <-chan struct{}) {
 	} else {
 		log.Printf("Touch grabbed on %d device(s)", grabbed)
 	}
-}
-
-func ioctlGrab(f *os.File, grab bool) error {
-	val := uintptr(0)
-	if grab {
-		val = 1
-	}
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(0x40044590), val)
-	if errno != 0 {
-		return errno
-	}
-	return nil
 }
 
 func (a *app) readGrabbedTouch(f *os.File, out chan<- string, done <-chan struct{}) {
@@ -1228,6 +1362,9 @@ func (a *app) loadToken() (tokenFile, error) {
 	}
 	if refreshed.RefreshToken == "" {
 		refreshed.RefreshToken = tok.RefreshToken
+	}
+	if refreshed.Scope == "" {
+		refreshed.Scope = tok.Scope
 	}
 	refreshed.ExpiresAt = time.Now().Unix() + int64(refreshed.ExpiresIn) - 60
 	if err := writeJSON(filepath.Join(a.base, "data", "token.json"), &refreshed); err != nil {

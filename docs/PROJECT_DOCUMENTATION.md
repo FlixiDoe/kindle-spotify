@@ -86,10 +86,13 @@ Reference starting points:
 
 ## Open Product TODOs
 
-- Show the current playlist or playback context name in the free zone above the playback buttons.
 - Show the active Spotify device name in the same lower information zone.
 - Consider a WebLaunch/browser fallback only if native touch remains unreliable on a specific model.
 - Consider moving more drawing to FBInk if cover/dashboard rendering becomes a priority.
+
+Done:
+
+- The native FBInk now-playing view shows the current Spotify playback context in the free zone above the playback controls when Spotify provides context data. It resolves `context.href` to a display name where possible and falls back to a short Spotify URI identifier.
 
 ## Maintenance Checklist
 

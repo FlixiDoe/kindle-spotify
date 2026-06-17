@@ -13,6 +13,7 @@ This is an independent hobby project and is not affiliated with, endorsed by, sp
 - Native full-screen Kindle remote launched from KUAL
 - Touch controls for play/pause, next, previous, centered volume +/- controls, shuffle, repeat, refresh, login, and device selection
 - Passive now-playing display for e-ink dashboards
+- Current Spotify playlist/playback context display when available
 - Spotify OAuth PKCE flow without a client secret
 - Local token refresh and Spotify Web API proxy
 - Manual login fallback for Kindle browser redirect issues
@@ -239,6 +240,7 @@ Preferred flow:
 
 Volume can be adjusted with the centered `VOL-  xx%  VOL+` touch areas between the status row and playback controls.
 Shuffle and repeat can be toggled by tapping the `SHUF` and `REP` status labels. Repeat cycles through Spotify's `off`, `context`, and `track` modes.
+The `CTX` row shows the active Spotify context, for example a playlist, album, artist, or liked songs.
 
 Manual fallback:
 
@@ -257,6 +259,10 @@ Start playback in Spotify on a phone, desktop, or speaker first, then refresh th
 `Premium required`
 
 Spotify playback-control endpoints generally require Spotify Premium.
+
+`CTX Playlist` shows only an ID instead of the playlist name
+
+Run the Spotify login flow again so the Kindle token receives the playlist read scopes. If the old token is reused, delete `extensions/spotify-remote/data/token.json` on the Kindle and then log in again. The Kindle UI shows `Login for Playlist` when the active token is missing those scopes.
 
 `Network blocked or Spotify unreachable`
 
