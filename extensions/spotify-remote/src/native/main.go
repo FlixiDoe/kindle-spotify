@@ -311,18 +311,45 @@ func (a *app) playbackContextLabel(p playback) string {
 		return "Liked Songs"
 	}
 	prefix := contextPrefix(ctx.Type)
+	ref := contextRef(ctx)
 	if ctx.Href != "" {
 		if name := a.spotifyResourceName(ctx.Href); name != "" {
-			return prefix + ": " + name
+			return contextDisplay(prefix, name, ref)
 		}
 	}
-	if ref := contextRef(ctx); ref != "" {
+	if ref != "" {
 		return prefix + ": " + ref
 	}
 	if strings.EqualFold(ctx.Type, "playlist") && !a.hasTokenScopes("playlist-read-private", "playlist-read-collaborative") {
 		return "Login for Playlist"
 	}
 	return prefix + ": unavailable"
+}
+
+func contextDisplay(prefix, name, fallback string) string {
+	name = strings.TrimSpace(name)
+	if kindleVisible(name) {
+		return prefix + ": " + name
+	}
+	if fallback != "" {
+		return prefix + ": " + fallback
+	}
+	return prefix + ": unavailable"
+}
+
+func kindleVisible(s string) bool {
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			return true
+		}
+		if r >= 'A' && r <= 'Z' {
+			return true
+		}
+		if r >= 'a' && r <= 'z' {
+			return true
+		}
+	}
+	return false
 }
 
 func (a *app) spotifyResourceName(endpoint string) string {
