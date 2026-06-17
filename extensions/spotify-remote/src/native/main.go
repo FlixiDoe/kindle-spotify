@@ -95,9 +95,10 @@ type device struct {
 }
 
 type playbackContext struct {
-	Type string `json:"type"`
-	Href string `json:"href"`
-	URI  string `json:"uri"`
+	Type         string            `json:"type"`
+	Href         string            `json:"href"`
+	URI          string            `json:"uri"`
+	ExternalURLs map[string]string `json:"external_urls"`
 }
 
 type playback struct {
@@ -303,24 +304,25 @@ func (a *app) drawFBInkNowPlaying() {
 
 func (a *app) playbackContextLabel(p playback) string {
 	ctx := p.Context
-	if ctx.Type == "" && ctx.URI == "" && ctx.Href == "" {
+	if ctx.Type == "" && ctx.URI == "" && ctx.Href == "" && len(ctx.ExternalURLs) == 0 {
 		return ""
 	}
 	if ctx.Type == "collection" {
 		return "Liked Songs"
 	}
+	prefix := contextPrefix(ctx.Type)
 	if ctx.Href != "" {
 		if name := a.spotifyResourceName(ctx.Href); name != "" {
-			return contextPrefix(ctx.Type) + ": " + name
-		}
-		if ref := shortSpotifyRef(ctx.Href); ref != "" {
-			return contextPrefix(ctx.Type) + ": " + ref
+			return prefix + ": " + name
 		}
 	}
-	if ctx.URI != "" {
-		return contextPrefix(ctx.Type) + ": " + shortSpotifyURI(ctx.URI)
+	if ref := contextRef(ctx); ref != "" {
+		return prefix + ": " + ref
 	}
-	return contextPrefix(ctx.Type)
+	if strings.EqualFold(ctx.Type, "playlist") && !a.hasTokenScopes("playlist-read-private", "playlist-read-collaborative") {
+		return "Login for Playlist"
+	}
+	return prefix + ": unavailable"
 }
 
 func (a *app) spotifyResourceName(endpoint string) string {
@@ -375,6 +377,36 @@ func shortSpotifyRef(raw string) string {
 		}
 	}
 	return strings.TrimSpace(raw)
+}
+
+func contextRef(ctx playbackContext) string {
+	if ctx.URI != "" {
+		return shortSpotifyURI(ctx.URI)
+	}
+	if ctx.Href != "" {
+		return shortSpotifyRef(ctx.Href)
+	}
+	if raw := strings.TrimSpace(ctx.ExternalURLs["spotify"]); raw != "" {
+		return shortSpotifyRef(raw)
+	}
+	return ""
+}
+
+func (a *app) hasTokenScopes(required ...string) bool {
+	tok, err := a.loadToken()
+	if err != nil {
+		return false
+	}
+	scopes := map[string]bool{}
+	for _, s := range strings.Fields(tok.Scope) {
+		scopes[s] = true
+	}
+	for _, s := range required {
+		if !scopes[s] {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *app) fbinkPath() string {
@@ -1303,6 +1335,9 @@ func (a *app) loadToken() (tokenFile, error) {
 	}
 	if refreshed.RefreshToken == "" {
 		refreshed.RefreshToken = tok.RefreshToken
+	}
+	if refreshed.Scope == "" {
+		refreshed.Scope = tok.Scope
 	}
 	refreshed.ExpiresAt = time.Now().Unix() + int64(refreshed.ExpiresIn) - 60
 	if err := writeJSON(filepath.Join(a.base, "data", "token.json"), &refreshed); err != nil {

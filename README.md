@@ -262,7 +262,7 @@ Spotify playback-control endpoints generally require Spotify Premium.
 
 `CTX Playlist` shows only an ID instead of the playlist name
 
-Run the Spotify login flow again so the Kindle token receives the playlist read scopes. If the old token is reused, delete `extensions/spotify-remote/data/token.json` on the Kindle and then log in again.
+Run the Spotify login flow again so the Kindle token receives the playlist read scopes. If the old token is reused, delete `extensions/spotify-remote/data/token.json` on the Kindle and then log in again. The Kindle UI shows `Login for Playlist` when the active token is missing those scopes.
 
 `Network blocked or Spotify unreachable`
 
