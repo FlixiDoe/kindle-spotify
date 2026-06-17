@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	scopes                     = "user-read-playback-state user-modify-playback-state user-read-currently-playing"
+	scopes                     = "user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private playlist-read-collaborative"
 	placeholderSpotifyClientID = "PASTE_SPOTIFY_CLIENT_ID_HERE"
 )
 
@@ -286,16 +286,16 @@ func (a *app) drawFBInkNowPlaying() {
 		a.fbinkText(4, 7, "|                    |")
 		a.fbinkText(4, 8, "+====================+")
 	}
-	a.fbinkText(4, 25, "====================")
 	a.fbinkText(2, -4, "Refresh 8s. Quit only in lower-right.")
 	a.fbinkText(6, 13, safe(title, 18))
 	a.fbinkText(4, 18, safe(artist, 24))
 	a.fbinkText(4, 21, safe(albumName, 24))
-	a.fbinkText(4, 27, progress+"          "+duration)
-	a.fbinkText(3, 31, "SHUF "+shuffle+"  REP "+repeat)
-	a.fbinkText(3, 33, safe(contextLabel, 34))
-	a.fbinkText(4, 35, "VOL-  "+volume+"%  VOL+")
-	a.fbinkText(5, 39, "|<   "+playIcon+"   >|")
+	a.fbinkText(4, 25, "====================")
+	a.fbinkText(4, 28, progress+"          "+duration)
+	a.fbinkText(3, 33, "SHUF "+shuffle+"  REP "+repeat)
+	a.fbinkText(2, 36, safe(contextLabel, 42))
+	a.fbinkText(4, 39, "VOL-  "+volume+"%  VOL+")
+	a.fbinkText(5, 44, "|<   "+playIcon+"   >|")
 	log.Printf("FBInk UI drawn: %s / %s / %s", title, artist, contextLabel)
 }
 
@@ -313,6 +313,9 @@ func (a *app) playbackContextLabel(p playback) string {
 	if ctx.Href != "" {
 		if name := a.spotifyResourceName(ctx.Href); name != "" {
 			return "CTX " + contextPrefix(ctx.Type) + ": " + name
+		}
+		if ref := shortSpotifyRef(ctx.Href); ref != "" {
+			return "CTX " + contextPrefix(ctx.Type) + ": " + ref
 		}
 	}
 	if ctx.URI != "" {
@@ -357,6 +360,22 @@ func shortSpotifyURI(uri string) string {
 		return uri
 	}
 	return parts[len(parts)-1]
+}
+
+func shortSpotifyRef(raw string) string {
+	if strings.HasPrefix(raw, "spotify:") {
+		return shortSpotifyURI(raw)
+	}
+	u, err := url.Parse(raw)
+	if err == nil {
+		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
+		for i := len(parts) - 1; i >= 0; i-- {
+			if parts[i] != "" {
+				return parts[i]
+			}
+		}
+	}
+	return strings.TrimSpace(raw)
 }
 
 func (a *app) fbinkPath() string {

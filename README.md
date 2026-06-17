@@ -240,6 +240,7 @@ Preferred flow:
 
 Volume can be adjusted with the centered `VOL-  xx%  VOL+` touch areas between the status row and playback controls.
 Shuffle and repeat can be toggled by tapping the `SHUF` and `REP` status labels. Repeat cycles through Spotify's `off`, `context`, and `track` modes.
+The `CTX` row shows the active Spotify context, for example a playlist, album, artist, or liked songs.
 
 Manual fallback:
 
@@ -258,6 +259,10 @@ Start playback in Spotify on a phone, desktop, or speaker first, then refresh th
 `Premium required`
 
 Spotify playback-control endpoints generally require Spotify Premium.
+
+`CTX Playlist` shows only an ID instead of the playlist name
+
+Run the Spotify login flow again so the Kindle token receives the playlist read scopes. If the old token is reused, delete `extensions/spotify-remote/data/token.json` on the Kindle and then log in again.
 
 `Network blocked or Spotify unreachable`
 
