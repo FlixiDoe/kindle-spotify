@@ -104,6 +104,31 @@ cd extensions\spotify-remote
 $env:GO111MODULE='off'; go test ./src/native
 ```
 
+## Deploy Checklist
+
+Preferred Windows deploy:
+
+```powershell
+.\scripts\deploy-kindle.ps1
+```
+
+Use an explicit drive letter if Windows does not expose the Kindle with the `Kindle` volume label:
+
+```powershell
+.\scripts\deploy-kindle.ps1 -DriveLetter I
+```
+
+Deploy rules:
+
+- Build locally before copying unless `-SkipBuild` is explicitly used.
+- Copy the new binary to `bin/spotify-remote-arm.new`; `run-native.sh` prefers that file on the next launch.
+- Preserve Kindle-local `data/config.json`, `data/token.json`, callback files, and logs.
+- Keep `extensions/spotify-remote/menu.json` and `extensions/spotifyremote/menu.json` synchronized on the Kindle.
+- Verify SHA256 of local binary and deployed binary.
+- Eject the Kindle before launching KUAL.
+
+Use `-DeployActiveBinary` only for a clean offline copy where the app is certainly not running; normal development deploys should keep using `.new`.
+
 Project convention:
 
 - Commit each completed change separately.

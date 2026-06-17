@@ -47,6 +47,8 @@ README.md                  Public project overview
 docs/
   PROJECT_DOCUMENTATION.md Internal implementation and deployment notes
   crash-logs/              Historical crash logs kept for debugging context
+scripts/
+  deploy-kindle.ps1         Windows USB deploy helper
 extensions/spotify-remote/
   config.xml                KUAL extension metadata
   menu.json                 KUAL menu definition
@@ -179,13 +181,33 @@ Release packages should include the built binary, but source commits should not 
 ## Install On Kindle
 
 1. Connect the Kindle over USB.
-2. Copy `extensions/spotify-remote` to:
+2. For development deploys on Windows, run:
+
+```powershell
+.\scripts\deploy-kindle.ps1
+```
+
+The script finds the Kindle USB drive, builds the ARM binary, copies the extension files, preserves local Kindle `data/config.json` and `data/token.json`, and deploys the new binary as:
+
+```text
+/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm.new
+```
+
+`run-native.sh` prefers `.new` on the next launch, which avoids overwriting a binary that may still be locked by a running Kindle process.
+
+If auto-detection fails, pass the drive letter:
+
+```powershell
+.\scripts\deploy-kindle.ps1 -DriveLetter I
+```
+
+Manual install is also possible: copy `extensions/spotify-remote` to:
 
 ```text
 /mnt/us/extensions/spotify-remote
 ```
 
-3. Ensure scripts and binary are executable:
+3. Ensure scripts and binary are executable when needed:
 
 ```sh
 chmod 755 /mnt/us/extensions/spotify-remote/*.sh
