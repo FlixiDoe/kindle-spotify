@@ -70,3 +70,13 @@ Linux/macOS:
 ```
 
 Both scripts produce `bin/spotify-remote-arm`. Release ZIPs may include the binary; source commits should not.
+
+## Development Deploy
+
+From the repository root on Windows:
+
+```powershell
+.\scripts\deploy-kindle.ps1
+```
+
+The deploy script copies the built binary as `bin/spotify-remote-arm.new` and leaves local Kindle runtime data untouched. `run-native.sh` automatically prefers `.new` on the next KUAL launch.
