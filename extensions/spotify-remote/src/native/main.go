@@ -250,7 +250,7 @@ func (a *app) drawFBInkNowPlaying() {
 	volume := "?"
 	shuffle := "?"
 	repeat := "off"
-	contextLabel := ""
+	contextLabel := "CTX none"
 	playIcon := "PLAY"
 	coverPath := ""
 	if err != nil {
@@ -292,32 +292,33 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkText(4, 18, safe(artist, 24))
 	a.fbinkText(4, 21, safe(albumName, 24))
 	a.fbinkText(4, 27, progress+"          "+duration)
-	if contextLabel != "" {
-		a.fbinkText(3, 29, safe(contextLabel, 32))
-	}
-	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
+	a.fbinkText(3, 31, "SHUF "+shuffle+"  REP "+repeat)
+	a.fbinkText(3, 33, safe(contextLabel, 34))
 	a.fbinkText(4, 35, "VOL-  "+volume+"%  VOL+")
-	a.fbinkText(3, 39, "SHUF "+shuffle+"  REP "+repeat)
-	log.Printf("FBInk UI drawn: %s / %s", title, artist)
+	a.fbinkText(5, 39, "|<   "+playIcon+"   >|")
+	log.Printf("FBInk UI drawn: %s / %s / %s", title, artist, contextLabel)
 }
 
 func (a *app) playbackContextLabel(p playback) string {
 	ctx := p.Context
 	if ctx.Type == "" && ctx.URI == "" && ctx.Href == "" {
-		return ""
+		if p.CurrentTrack.Album.Name != "" {
+			return "CTX Album: " + p.CurrentTrack.Album.Name
+		}
+		return "CTX none"
 	}
 	if ctx.Type == "collection" {
-		return "Context: Liked Songs"
+		return "CTX Liked Songs"
 	}
 	if ctx.Href != "" {
 		if name := a.spotifyResourceName(ctx.Href); name != "" {
-			return contextPrefix(ctx.Type) + ": " + name
+			return "CTX " + contextPrefix(ctx.Type) + ": " + name
 		}
 	}
 	if ctx.URI != "" {
-		return contextPrefix(ctx.Type) + ": " + shortSpotifyURI(ctx.URI)
+		return "CTX " + contextPrefix(ctx.Type) + ": " + shortSpotifyURI(ctx.URI)
 	}
-	return contextPrefix(ctx.Type)
+	return "CTX " + contextPrefix(ctx.Type)
 }
 
 func (a *app) spotifyResourceName(endpoint string) string {
