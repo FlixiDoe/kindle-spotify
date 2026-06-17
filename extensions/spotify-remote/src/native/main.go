@@ -268,6 +268,9 @@ func (a *app) drawFBInkNowPlaying() {
 		shuffle = strconv.FormatBool(p.Shuffle)
 		repeat = p.Repeat
 		contextLabel = a.playbackContextLabel(p)
+		if contextLabel != "" {
+			albumName = contextLabel
+		}
 		coverPath = a.prepareCover(p.CurrentTrack.Album.Images)
 		if p.IsPlaying {
 			playIcon = "PAUSE"
@@ -291,9 +294,6 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkText(6, 13, safe(title, 18))
 	a.fbinkText(4, 18, safe(artist, 24))
 	a.fbinkText(4, 21, safe(albumName, 24))
-	if contextLabel != "" {
-		a.fbinkText(2, 23, safe(contextLabel, 42))
-	}
 	a.fbinkText(4, 27, progress+"          "+duration)
 	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
 	a.fbinkText(4, 35, "VOL-  "+volume+"%  VOL+")
@@ -304,26 +304,23 @@ func (a *app) drawFBInkNowPlaying() {
 func (a *app) playbackContextLabel(p playback) string {
 	ctx := p.Context
 	if ctx.Type == "" && ctx.URI == "" && ctx.Href == "" {
-		if p.CurrentTrack.Album.Name != "" {
-			return "CTX Album: " + p.CurrentTrack.Album.Name
-		}
-		return "CTX none"
+		return ""
 	}
 	if ctx.Type == "collection" {
-		return "CTX Liked Songs"
+		return "Liked Songs"
 	}
 	if ctx.Href != "" {
 		if name := a.spotifyResourceName(ctx.Href); name != "" {
-			return "CTX " + contextPrefix(ctx.Type) + ": " + name
+			return contextPrefix(ctx.Type) + ": " + name
 		}
 		if ref := shortSpotifyRef(ctx.Href); ref != "" {
-			return "CTX " + contextPrefix(ctx.Type) + ": " + ref
+			return contextPrefix(ctx.Type) + ": " + ref
 		}
 	}
 	if ctx.URI != "" {
-		return "CTX " + contextPrefix(ctx.Type) + ": " + shortSpotifyURI(ctx.URI)
+		return contextPrefix(ctx.Type) + ": " + shortSpotifyURI(ctx.URI)
 	}
-	return "CTX " + contextPrefix(ctx.Type)
+	return contextPrefix(ctx.Type)
 }
 
 func (a *app) spotifyResourceName(endpoint string) string {
