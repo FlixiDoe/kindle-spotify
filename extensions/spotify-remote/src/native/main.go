@@ -250,7 +250,7 @@ func (a *app) drawFBInkNowPlaying() {
 	volume := "?"
 	shuffle := "?"
 	repeat := "off"
-	contextLabel := "CTX none"
+	contextLabel := ""
 	playIcon := "PLAY"
 	coverPath := ""
 	if err != nil {
@@ -286,16 +286,18 @@ func (a *app) drawFBInkNowPlaying() {
 		a.fbinkText(4, 7, "|                    |")
 		a.fbinkText(4, 8, "+====================+")
 	}
+	a.fbinkText(4, 25, "====================")
 	a.fbinkText(2, -4, "Refresh 8s. Quit only in lower-right.")
-	a.fbinkText(5, 16, safe(title, 20))
-	a.fbinkText(3, 19, safe(artist, 30))
-	a.fbinkText(3, 21, safe(albumName, 30))
-	a.fbinkText(3, 24, "========================")
-	a.fbinkText(3, 26, progress+"              "+duration)
-	a.fbinkText(3, 29, "SHUF "+shuffle+"  REP "+repeat)
-	a.fbinkText(2, 31, safe(contextLabel, 44))
-	a.fbinkText(4, 34, "VOL-  "+volume+"%  VOL+")
-	a.fbinkText(5, 38, "|<   "+playIcon+"   >|")
+	a.fbinkText(6, 13, safe(title, 18))
+	a.fbinkText(4, 18, safe(artist, 24))
+	a.fbinkText(4, 21, safe(albumName, 24))
+	if contextLabel != "" {
+		a.fbinkText(2, 23, safe(contextLabel, 42))
+	}
+	a.fbinkText(4, 27, progress+"          "+duration)
+	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
+	a.fbinkText(4, 35, "VOL-  "+volume+"%  VOL+")
+	a.fbinkText(3, 39, "SHUF "+shuffle+"  REP "+repeat)
 	log.Printf("FBInk UI drawn: %s / %s / %s", title, artist, contextLabel)
 }
 
@@ -397,11 +399,7 @@ func (a *app) fbinkClear() {
 
 func (a *app) fbinkText(size, row int, text string) {
 	if p := a.fbinkPath(); p != "" {
-		y := row
-		if row >= 0 && row < 100 {
-			y = row * a.cfg.EipsRowHeight
-		}
-		_ = exec.Command(p, "-q", "-S", strconv.Itoa(size), "-m", "-y", strconv.Itoa(y), text).Run()
+		_ = exec.Command(p, "-q", "-S", strconv.Itoa(size), "-m", "-y", strconv.Itoa(row), text).Run()
 	}
 }
 
