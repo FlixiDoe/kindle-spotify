@@ -30,11 +30,13 @@ data/config.example.json Public configuration template
 
 The normal KUAL menu is intentionally small:
 
-- `Now Playing Display`: starts the fullscreen Kindle Spotify remote.
+- `Now Playing Display`: starts the fullscreen Kindle Spotify remote through `launch.sh`.
 - `Create Login URL`: writes `data/login_url.txt` for manual OAuth login.
 - `Finish Login From callback.txt`: exchanges a pasted redirect URL or code from `data/callback.txt`.
 
 Direct control and recovery scripts remain in this folder for maintenance, but are hidden from the normal KUAL menu to keep day-to-day use simple.
+
+The `nowplaying-*.sh` scripts are legacy passive-display helpers. They should not be wired to the normal KUAL start item because they do not run the native FBInk UI.
 
 ## Local Files
 
