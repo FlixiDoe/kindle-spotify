@@ -19,7 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
 )
 
@@ -95,13 +94,20 @@ type device struct {
 	VolumePercent int    `json:"volume_percent"`
 }
 
+type playbackContext struct {
+	Type string `json:"type"`
+	Href string `json:"href"`
+	URI  string `json:"uri"`
+}
+
 type playback struct {
-	Device       device `json:"device"`
-	Shuffle      bool   `json:"shuffle_state"`
-	Repeat       string `json:"repeat_state"`
-	ProgressMS   int    `json:"progress_ms"`
-	IsPlaying    bool   `json:"is_playing"`
-	CurrentTrack track  `json:"item"`
+	Device       device          `json:"device"`
+	Shuffle      bool            `json:"shuffle_state"`
+	Repeat       string          `json:"repeat_state"`
+	ProgressMS   int             `json:"progress_ms"`
+	IsPlaying    bool            `json:"is_playing"`
+	CurrentTrack track           `json:"item"`
+	Context      playbackContext `json:"context"`
 }
 
 type uiButton struct {
@@ -244,6 +250,7 @@ func (a *app) drawFBInkNowPlaying() {
 	volume := "?"
 	shuffle := "?"
 	repeat := "off"
+	contextLabel := ""
 	playIcon := "PLAY"
 	coverPath := ""
 	if err != nil {
@@ -260,6 +267,7 @@ func (a *app) drawFBInkNowPlaying() {
 		volume = strconv.Itoa(p.Device.VolumePercent)
 		shuffle = strconv.FormatBool(p.Shuffle)
 		repeat = p.Repeat
+		contextLabel = a.playbackContextLabel(p)
 		coverPath = a.prepareCover(p.CurrentTrack.Album.Images)
 		if p.IsPlaying {
 			playIcon = "PAUSE"
@@ -284,10 +292,70 @@ func (a *app) drawFBInkNowPlaying() {
 	a.fbinkText(4, 18, safe(artist, 24))
 	a.fbinkText(4, 21, safe(albumName, 24))
 	a.fbinkText(4, 27, progress+"          "+duration)
+	if contextLabel != "" {
+		a.fbinkText(3, 29, safe(contextLabel, 32))
+	}
 	a.fbinkText(5, 31, "|<   "+playIcon+"   >|")
 	a.fbinkText(4, 35, "VOL-  "+volume+"%  VOL+")
 	a.fbinkText(3, 39, "SHUF "+shuffle+"  REP "+repeat)
 	log.Printf("FBInk UI drawn: %s / %s", title, artist)
+}
+
+func (a *app) playbackContextLabel(p playback) string {
+	ctx := p.Context
+	if ctx.Type == "" && ctx.URI == "" && ctx.Href == "" {
+		return ""
+	}
+	if ctx.Type == "collection" {
+		return "Context: Liked Songs"
+	}
+	if ctx.Href != "" {
+		if name := a.spotifyResourceName(ctx.Href); name != "" {
+			return contextPrefix(ctx.Type) + ": " + name
+		}
+	}
+	if ctx.URI != "" {
+		return contextPrefix(ctx.Type) + ": " + shortSpotifyURI(ctx.URI)
+	}
+	return contextPrefix(ctx.Type)
+}
+
+func (a *app) spotifyResourceName(endpoint string) string {
+	var out struct {
+		Name string `json:"name"`
+	}
+	_, err := a.spotifyAPI(http.MethodGet, endpoint, nil, &out)
+	if err != nil {
+		log.Printf("context name lookup failed for %s: %v", endpoint, err)
+		return ""
+	}
+	return strings.TrimSpace(out.Name)
+}
+
+func contextPrefix(contextType string) string {
+	switch strings.ToLower(contextType) {
+	case "playlist":
+		return "Playlist"
+	case "album":
+		return "Album"
+	case "artist":
+		return "Artist"
+	case "collection":
+		return "Context"
+	default:
+		if contextType == "" {
+			return "Context"
+		}
+		return strings.ToUpper(contextType[:1]) + contextType[1:]
+	}
+}
+
+func shortSpotifyURI(uri string) string {
+	parts := strings.Split(uri, ":")
+	if len(parts) == 0 {
+		return uri
+	}
+	return parts[len(parts)-1]
 }
 
 func (a *app) fbinkPath() string {
@@ -407,18 +475,6 @@ func (a *app) grabTouchLoop(out chan<- string, done <-chan struct{}) {
 	} else {
 		log.Printf("Touch grabbed on %d device(s)", grabbed)
 	}
-}
-
-func ioctlGrab(f *os.File, grab bool) error {
-	val := uintptr(0)
-	if grab {
-		val = 1
-	}
-	_, _, errno := syscall.Syscall(syscall.SYS_IOCTL, f.Fd(), uintptr(0x40044590), val)
-	if errno != 0 {
-		return errno
-	}
-	return nil
 }
 
 func (a *app) readGrabbedTouch(f *os.File, out chan<- string, done <-chan struct{}) {

@@ -13,6 +13,7 @@ This is an independent hobby project and is not affiliated with, endorsed by, sp
 - Native full-screen Kindle remote launched from KUAL
 - Touch controls for play/pause, next, previous, centered volume +/- controls, shuffle, repeat, refresh, login, and device selection
 - Passive now-playing display for e-ink dashboards
+- Current Spotify playlist/playback context display when available
 - Spotify OAuth PKCE flow without a client secret
 - Local token refresh and Spotify Web API proxy
 - Manual login fallback for Kindle browser redirect issues
