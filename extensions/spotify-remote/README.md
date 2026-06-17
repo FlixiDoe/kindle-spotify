@@ -38,7 +38,7 @@ Direct control and recovery scripts remain in this folder for maintenance, but a
 
 The `nowplaying-*.sh` scripts are legacy passive-display helpers. They should not be wired to the normal KUAL start item because they do not run the native FBInk UI.
 
-The native now-playing view keeps the original Kindle layout. The third track-info row shows the album by default and switches to the active Spotify context when available, for example `Playlist: <name>`, `Playlist: <id>`, or `Liked Songs`. Playlist names require the playlist read OAuth scopes; emoji-only names fall back to the Spotify playlist ID because FBInk cannot render them visibly.
+The native now-playing view keeps the original Kindle layout. The third track-info row shows the album by default and switches to the active Spotify context when available, for example `Playlist: <name>`, `Playlist: <id>`, or `Liked Songs`. Playlist names require the playlist read OAuth scopes; emoji-only names fall back to the Spotify playlist ID because FBInk cannot render them visibly. The lower information area also shows the active Spotify device name when Spotify provides it.
 
 ## Local Files
 
@@ -62,6 +62,13 @@ Use `data/config.example.json` as the template for local config. Never add a Spo
 Windows:
 
 ```powershell
+.\build.ps1
+```
+
+If `go` is not on `PATH`, set `GOEXE` first:
+
+```powershell
+$env:GOEXE='C:\path\to\go.exe'
 .\build.ps1
 ```
 

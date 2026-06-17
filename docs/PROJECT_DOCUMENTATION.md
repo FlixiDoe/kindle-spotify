@@ -31,6 +31,7 @@ The native app is responsible for:
 - normalizing touch coordinates with config fallbacks;
 - handling Spotify OAuth PKCE and token refresh;
 - calling Spotify playback APIs;
+- showing current playback context and active Spotify device names when Spotify provides them;
 - showing diagnostic tap output such as `raw=x,y xy=x,y`.
 
 The legacy browser/server implementation remains in `src/spotify-remote.go` and `www/` as a setup/development fallback. It is not the preferred daily UI.
@@ -86,13 +87,13 @@ Reference starting points:
 
 ## Open Product TODOs
 
-- Show the active Spotify device name in the same lower information zone.
 - Consider a WebLaunch/browser fallback only if native touch remains unreliable on a specific model.
 - Consider moving more drawing to FBInk if cover/dashboard rendering becomes a priority.
 
 Done:
 
 - The native FBInk now-playing view keeps the stable main layout and uses the third track-info row for Spotify playback context when Spotify provides it. It resolves `context.href` to a display name where possible, falls back to a short Spotify URI identifier, and avoids emoji-only names that FBInk would render as an empty label.
+- The native FBInk now-playing view and browser fallback show the active Spotify device name when the playback state includes `device.name`.
 
 ## Maintenance Checklist
 
@@ -102,9 +103,12 @@ Before changing Kindle runtime behavior:
 git status --short
 python -m json.tool extensions\spotify-remote\menu.json > $null
 python -m json.tool extensions\spotifyremote\menu.json > $null
+$go = if ($env:GOEXE) { $env:GOEXE } else { "go" }
 cd extensions\spotify-remote
 .\build.ps1
-$env:GO111MODULE='off'; go test ./src/native
+cd ..\..
+$env:CGO_ENABLED='0'; $env:GO111MODULE='off'; $env:GOOS='linux'; $env:GOARCH='arm'; $env:GOARM='7'
+& $go test ./extensions/spotify-remote/src/native ./extensions/spotify-remote/src
 ```
 
 ## Deploy Checklist

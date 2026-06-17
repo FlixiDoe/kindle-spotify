@@ -14,6 +14,7 @@ This is an independent hobby project and is not affiliated with, endorsed by, sp
 - Touch controls for play/pause, next, previous, centered volume +/- controls, shuffle, repeat, refresh, login, and device selection
 - Passive now-playing display for e-ink dashboards
 - Current Spotify playlist/playback context display when available
+- Active Spotify device display in the native Kindle UI and browser fallback
 - Spotify OAuth PKCE flow without a client secret
 - Local token refresh and Spotify Web API proxy
 - Manual login fallback for Kindle browser redirect issues
@@ -28,7 +29,7 @@ Current native assumptions:
 
 - Display: `1236x1648`
 - Touch raw range: `0..4095`
-- Renderer: Kindle `eips`
+- Renderer: FBInk for the native now-playing screen, with Kindle `eips` helpers for fallback/diagnostics
 - Extension path on device: `/mnt/us/extensions/spotify-remote`
 
 Other Kindle models may need layout or touch-coordinate calibration in `extensions/spotify-remote/src/native/main.go`.
@@ -139,6 +140,13 @@ cd extensions\spotify-remote
 .\build.ps1
 ```
 
+If `go` is not on `PATH`, pass the Go executable through `GOEXE`:
+
+```powershell
+$env:GOEXE='C:\path\to\go.exe'
+.\build.ps1
+```
+
 Linux/macOS:
 
 ```sh
@@ -241,6 +249,7 @@ Preferred flow:
 Volume can be adjusted with the centered `VOL-  xx%  VOL+` touch areas between the status row and playback controls.
 Shuffle and repeat can be toggled by tapping the `SHUF` and `REP` status labels. Repeat cycles through Spotify's `off`, `context`, and `track` modes.
 The third track-info row normally shows the album. When Spotify provides playback context, that row shows the active context instead, for example `Playlist: <name>`, `Playlist: <id>`, or `Liked Songs`.
+The lower information area also shows the active Spotify device name, so it is visible whether playback is running on a phone, desktop, speaker, or browser session.
 
 Manual fallback:
 
