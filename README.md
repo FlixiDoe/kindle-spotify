@@ -139,15 +139,14 @@ Replace only `client_id` with your own Spotify app Client ID. Do not use or stor
 Windows:
 
 ```powershell
-cd extensions\spotify-remote
-.\build.ps1
+.\scripts\build-native.ps1
 ```
 
 If `go` is not on `PATH`, pass the Go executable through `GOEXE`:
 
 ```powershell
 $env:GOEXE='C:\path\to\go.exe'
-.\build.ps1
+.\scripts\build-native.ps1
 ```
 
 Linux/macOS:
@@ -174,12 +173,22 @@ CGO_ENABLED=0
 
 If the binary does not run on an older Kindle, try rebuilding with `GOARM=6`.
 
-## Package
+## Test
 
-From the repository root:
+From the repository root on Windows:
 
 ```powershell
-Compress-Archive -Path extensions\spotify-remote -DestinationPath spotify-remote-kual.zip -Force
+.\scripts\test.ps1
+```
+
+This validates the KUAL menu JSON files and runs the Go tests with the Kindle ARM build environment.
+
+## Package
+
+From the repository root on Windows:
+
+```powershell
+.\scripts\package-kual.ps1
 ```
 
 Or on Linux/macOS:
@@ -189,6 +198,8 @@ zip -r spotify-remote-kual.zip extensions/spotify-remote
 ```
 
 Release packages should include the built binary, but source commits should not track local binaries, generated ZIPs, logs, or token files.
+
+The generated Windows package is written to `dist/spotify-remote-kual.zip` by default.
 
 ## Install On Kindle
 

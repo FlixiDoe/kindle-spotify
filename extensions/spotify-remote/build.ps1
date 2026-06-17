@@ -1,5 +1,16 @@
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
+$repoRoot = Resolve-Path (Join-Path $root "..\..")
+$sharedLib = Join-Path $repoRoot "scripts\lib\common.ps1"
+
+if (Test-Path $sharedLib) {
+  . $sharedLib
+  $out = Invoke-NativeBuild -RepoRoot $repoRoot
+  Write-Host "Built $out"
+  Write-Host "On Kindle, ensure executable bit if needed: chmod 755 extensions/spotify-remote/bin/spotify-remote-arm"
+  return
+}
+
 $outDir = Join-Path $root "bin"
 $out = Join-Path $outDir "spotify-remote-arm"
 $goExe = $env:GOEXE

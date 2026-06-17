@@ -62,14 +62,14 @@ Use `data/config.example.json` as the template for local config. Never add a Spo
 Windows:
 
 ```powershell
-.\build.ps1
+..\..\scripts\build-native.ps1
 ```
 
 If `go` is not on `PATH`, set `GOEXE` first:
 
 ```powershell
 $env:GOEXE='C:\path\to\go.exe'
-.\build.ps1
+..\..\scripts\build-native.ps1
 ```
 
 Linux/macOS:
@@ -89,3 +89,9 @@ From the repository root on Windows:
 ```
 
 The deploy script copies the built binary as `bin/spotify-remote-arm.new` and leaves local Kindle runtime data untouched. `run-native.sh` automatically prefers `.new` on the next KUAL launch.
+
+Other Windows helper scripts live in `scripts/`:
+
+- `build-native.ps1`: builds the Kindle ARM binary.
+- `test.ps1`: validates menu JSON and runs Go tests.
+- `package-kual.ps1`: creates `dist/spotify-remote-kual.zip`.
