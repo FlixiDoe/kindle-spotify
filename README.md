@@ -34,7 +34,7 @@ Other Kindle models may need layout or touch-coordinate calibration in `extensio
 
 ## Architecture Notes
 
-Detailed implementation notes live in `docs/PROJECT_DOCUMENTATION.md`. That document also includes a dedicated section named `Externe Research-Notizen von Gemini`, based on Gemini 3.1 Pro deep research about Kindle/KUAL app development. Those notes are treated as architecture input and are separated from verified project behavior.
+Detailed implementation and research notes live in `docs/PROJECT_DOCUMENTATION.md`. That document is intentionally internal and avoids repeating this README's setup and user instructions.
 
 ## Development Assistance
 
@@ -218,11 +218,6 @@ Preferred flow:
 Volume can be adjusted with the centered `VOL-  xx%  VOL+` touch areas between the status row and playback controls.
 Shuffle and repeat can be toggled by tapping the `SHUF` and `REP` status labels. Repeat cycles through Spotify's `off`, `context`, and `track` modes.
 
-## TODO
-
-- Show the current playlist or playback context name in the free space above the playback buttons, between the shuffle/repeat row and the `|< PLAY >|` controls.
-- Show the active Spotify device name in the marked free space so the Kindle display makes clear where music is currently playing.
-
 Manual fallback:
 
 1. Run `Create Login URL` in KUAL.
@@ -279,20 +274,6 @@ sh /mnt/us/extensions/spotify-remote/recover.sh
 ```
 
 Use a full reboot only as the last resort.
-
-## Security And Publishing Notes
-
-Do not publish local runtime data:
-
-- `extensions/spotify-remote/data/token.json`
-- `extensions/spotify-remote/data/config.json`
-- `extensions/spotify-remote/logs/`
-- generated ZIP files
-- built binaries
-
-Historical crash logs that are useful for debugging can be kept under `docs/crash-logs/`. Root-level ad hoc crash dumps are ignored until they are reviewed and moved there intentionally.
-
-If any token file was ever committed, rotate the Spotify authorization by deleting the token and logging in again. For a public repository, also rewrite Git history before publishing if sensitive data was committed in earlier commits.
 
 ## Legal, Privacy, And Security
 
