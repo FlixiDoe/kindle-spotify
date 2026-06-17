@@ -101,14 +101,8 @@ Before changing Kindle runtime behavior:
 
 ```powershell
 git status --short
-python -m json.tool extensions\spotify-remote\menu.json > $null
-python -m json.tool extensions\spotifyremote\menu.json > $null
-$go = if ($env:GOEXE) { $env:GOEXE } else { "go" }
-cd extensions\spotify-remote
-.\build.ps1
-cd ..\..
-$env:CGO_ENABLED='0'; $env:GO111MODULE='off'; $env:GOOS='linux'; $env:GOARCH='arm'; $env:GOARM='7'
-& $go test ./extensions/spotify-remote/src/native ./extensions/spotify-remote/src
+.\scripts\build-native.ps1
+.\scripts\test.ps1
 ```
 
 ## Deploy Checklist
@@ -135,6 +129,15 @@ Deploy rules:
 - Eject the Kindle before launching KUAL.
 
 Use `-DeployActiveBinary` only for a clean offline copy where the app is certainly not running; normal development deploys should keep using `.new`.
+
+Script library:
+
+- `scripts/lib/common.ps1`: repo paths, Go tool discovery, Kindle ARM Go environment, native build/test helpers, required-file copying.
+- `scripts/lib/kindle.ps1`: Kindle USB drive detection and extension deployment.
+- `scripts/build-native.ps1`: normal Windows build entry point.
+- `scripts/test.ps1`: JSON validation plus Go tests.
+- `scripts/package-kual.ps1`: release ZIP creation under `dist/`.
+- `scripts/deploy-kindle.ps1`: USB deploy entry point built on top of the shared library.
 
 Project convention:
 

@@ -13,6 +13,7 @@ extensions/spotify-remote/logs/
 
 # Build and release artifacts
 extensions/spotify-remote/bin/
+dist/
 *.zip
 
 # OS/editor noise
