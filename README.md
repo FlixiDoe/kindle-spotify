@@ -10,16 +10,19 @@ This is an independent hobby project and is not affiliated with, endorsed by, sp
 
 ## Features
 
-- Native full-screen Kindle remote launched from KUAL
-- Touch controls for play/pause, next, previous, centered volume +/- controls, shuffle, repeat, refresh, login, and device selection
-- Passive now-playing display for e-ink dashboards
-- Current Spotify playlist/playback context display when available
-- Active Spotify device display in the native Kindle UI and browser fallback
-- Spotify OAuth PKCE flow without a client secret
-- Local token refresh and Spotify Web API proxy
-- Manual login fallback for Kindle browser redirect issues
-- Cross-compile scripts for Linux ARM Kindle targets
-- Recovery script to restart the Kindle framework if the native UI is interrupted
+- KUAL-launched native fullscreen Kindle remote for jailbroken Kindle devices
+- E-ink optimized now-playing screen with album cover, title, artist, album/playback context, progress, duration, volume, shuffle, repeat, and active Spotify device
+- Touch controls in the native UI for previous, play/pause, next, volume down/up, shuffle toggle, repeat mode cycling, and lower-right quit
+- Spotify playlist/playback context display when available, including playlist names, playlist ID fallback, albums, artists, and Liked Songs context
+- Active Spotify device name display in both the native Kindle UI and browser fallback
+- Spotify OAuth PKCE login without a client secret
+- KUAL login fallback that writes `data/login_url.txt` and completes login from `data/callback.txt`
+- Local token storage and automatic refresh-token handling
+- Spotify Web API playback control for play, pause, next, previous, volume, shuffle, repeat, and transfer/device actions in the fallback server path
+- Browser/server fallback UI kept for setup and development
+- Windows USB deploy helper that builds the ARM binary, preserves Kindle-local config/token data, and deploys as `spotify-remote-arm.new`
+- Cross-compile helpers for Linux ARM Kindle targets
+- Framework stop/start and recovery scripts for PW5/newer firmware white-screen or interrupted-app recovery
 
 ## Target Devices
 
