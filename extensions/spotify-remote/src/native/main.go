@@ -1,3 +1,9 @@
+// Package main implements the native Kindle Spotify Remote runtime.
+// It targets jailbroken Kindle devices where Go can shell out to FBInk, eips,
+// lipc-set-prop, and Linux /dev/input event devices to provide a fullscreen
+// touch UI without a browser. The file owns the Kindle-specific KUAL login
+// workflow, Spotify PKCE authorization, token refresh, playback controls,
+// session expiry handling, and display/input loops used by the extension.
 package main
 
 import (
@@ -22,136 +28,161 @@ import (
 	"time"
 )
 
+// Spotify OAuth, display, input, and runtime defaults used throughout the native remote.
 const (
-	scopes                     = "user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private playlist-read-collaborative"
+	// scopes lists the Spotify Web API permissions requested during PKCE login; playback state and control require user-read-playback-state, user-read-currently-playing, and user-modify-playback-state, while playlist context names require the playlist-read-* scopes.
+	scopes = "user-read-playback-state user-modify-playback-state user-read-currently-playing playlist-read-private playlist-read-collaborative"
+	// placeholderSpotifyClientID is the config-template value that marks an unconfigured Spotify application client ID.
 	placeholderSpotifyClientID = "PASTE_SPOTIFY_CLIENT_ID_HERE"
 )
 
+// Package-level OAuth endpoints and sentinel errors shared by KUAL, FBInk UI, and background refresh paths.
 var (
+	// spotifyTokenEndpoint is Spotify Accounts Service POST /api/token; tests may replace it to avoid live network calls.
 	spotifyTokenEndpoint = "https://accounts.spotify.com/api/token"
-	errInvalidGrant      = errors.New("spotify invalid_grant")
-	errSessionExpired    = errors.New("Session abgelaufen - bitte erneut einloggen")
+	// errInvalidGrant marks Spotify Accounts HTTP 400 responses whose JSON error field is invalid_grant; callers clear data/token.json and force a fresh login.
+	errInvalidGrant = errors.New("spotify invalid_grant")
+	// errSessionExpired is the user-facing terminal refresh error used after invalid_grant proves the stored refresh token can no longer be used.
+	errSessionExpired = errors.New("Session abgelaufen - bitte erneut einloggen")
 )
 
+// config describes data/config.json for the native Kindle runtime.
 type config struct {
-	ClientID          string `json:"client_id"`
-	Redirect          string `json:"redirect_uri"`
-	Port              int    `json:"port"`
-	RefreshSec        int    `json:"refresh_seconds"`
-	ScreenWidth       int    `json:"screen_width"`
-	ScreenHeight      int    `json:"screen_height"`
-	TouchMinX         int    `json:"touch_min_x"`
-	TouchMaxX         int    `json:"touch_max_x"`
-	TouchMinY         int    `json:"touch_min_y"`
-	TouchMaxY         int    `json:"touch_max_y"`
-	TouchSwapXY       bool   `json:"touch_swap_xy"`
-	TouchInvertX      bool   `json:"touch_invert_x"`
-	TouchInvertY      bool   `json:"touch_invert_y"`
-	TouchUseKernelAbs *bool  `json:"touch_use_kernel_abs"`
-	EipsColWidth      int    `json:"eips_col_width"`
-	EipsRowHeight     int    `json:"eips_row_height"`
-	ButtonTop         int    `json:"button_top"`
-	ButtonHeight      int    `json:"button_height"`
-	ButtonGap         int    `json:"button_gap"`
+	ClientID          string `json:"client_id"`            // ClientID is the public Spotify application client ID used in PKCE requests; no client secret is stored on the Kindle.
+	Redirect          string `json:"redirect_uri"`         // Redirect is the loopback callback URL registered with Spotify and used by KUAL/browser login flows.
+	Port              int    `json:"port"`                 // Port is the local loopback HTTP port for OAuth callbacks and defaults to 8787.
+	RefreshSec        int    `json:"refresh_seconds"`      // RefreshSec controls the polling interval for playback state in the eips UI loop.
+	ScreenWidth       int    `json:"screen_width"`         // ScreenWidth is the Kindle framebuffer width in pixels used to map touch coordinates to UI regions.
+	ScreenHeight      int    `json:"screen_height"`        // ScreenHeight is the Kindle framebuffer height in pixels used to map touch coordinates to UI regions.
+	TouchMinX         int    `json:"touch_min_x"`          // TouchMinX is the configured raw input minimum for X when kernel ABS metadata is unavailable or disabled.
+	TouchMaxX         int    `json:"touch_max_x"`          // TouchMaxX is the configured raw input maximum for X when kernel ABS metadata is unavailable or disabled.
+	TouchMinY         int    `json:"touch_min_y"`          // TouchMinY is the configured raw input minimum for Y when kernel ABS metadata is unavailable or disabled.
+	TouchMaxY         int    `json:"touch_max_y"`          // TouchMaxY is the configured raw input maximum for Y when kernel ABS metadata is unavailable or disabled.
+	TouchSwapXY       bool   `json:"touch_swap_xy"`        // TouchSwapXY swaps raw axes for Kindle models whose touch controller orientation differs from the framebuffer.
+	TouchInvertX      bool   `json:"touch_invert_x"`       // TouchInvertX mirrors normalized X after scaling for panels mounted in the opposite horizontal direction.
+	TouchInvertY      bool   `json:"touch_invert_y"`       // TouchInvertY mirrors normalized Y after scaling for panels mounted in the opposite vertical direction.
+	TouchUseKernelAbs *bool  `json:"touch_use_kernel_abs"` // TouchUseKernelAbs selects EVIOCGABS calibration from the kernel when true or nil, and forces config ranges when false.
+	EipsColWidth      int    `json:"eips_col_width"`       // EipsColWidth converts framebuffer X pixels into eips text columns for button hit labels.
+	EipsRowHeight     int    `json:"eips_row_height"`      // EipsRowHeight converts framebuffer Y pixels into eips text rows for button hit labels.
+	ButtonTop         int    `json:"button_top"`           // ButtonTop is the first button's top pixel position in the eips fallback UI.
+	ButtonHeight      int    `json:"button_height"`        // ButtonHeight is the vertical pixel span for each touch button in the eips fallback UI.
+	ButtonGap         int    `json:"button_gap"`           // ButtonGap is the vertical pixel gap inserted between eips fallback UI buttons.
 }
 
+// tokenFile is the persisted Spotify token document stored at data/token.json.
 type tokenFile struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
-	Scope        string `json:"scope"`
-	ExpiresIn    int    `json:"expires_in"`
-	ExpiresAt    int64  `json:"expires_at"`
-	AuthorizedAt int64  `json:"authorized_at,omitempty"`
+	AccessToken  string `json:"access_token"`            // AccessToken is the bearer token sent to Spotify Web API endpoints until ExpiresAt passes.
+	RefreshToken string `json:"refresh_token"`           // RefreshToken is the long-lived Spotify token used with grant_type=refresh_token when the access token expires.
+	TokenType    string `json:"token_type"`              // TokenType is normally "Bearer" and is retained for completeness from Spotify's token response.
+	Scope        string `json:"scope"`                   // Scope is Spotify's space-delimited granted scope list and is checked before fetching private playlist names.
+	ExpiresIn    int    `json:"expires_in"`              // ExpiresIn is Spotify's lifetime in seconds for the access token returned by /api/token.
+	ExpiresAt    int64  `json:"expires_at"`              // ExpiresAt is the local Unix timestamp at which the access token should be considered stale, with a safety margin.
+	AuthorizedAt int64  `json:"authorized_at,omitempty"` // AuthorizedAt is the first successful authorization Unix timestamp, preserved across refreshes for session age diagnostics.
 }
 
+// oauthState is the short-lived PKCE login state stored at data/oauth.json between authorization URL creation and callback handling.
 type oauthState struct {
-	State        string `json:"state"`
-	CodeVerifier string `json:"code_verifier"`
-	CreatedAt    int64  `json:"created_at"`
+	State        string `json:"state"`         // State is the CSRF token sent to Spotify authorize and compared with the callback state parameter.
+	CodeVerifier string `json:"code_verifier"` // CodeVerifier is the high-entropy PKCE secret later posted to /api/token with the authorization code.
+	CreatedAt    int64  `json:"created_at"`    // CreatedAt is the Unix timestamp when the login attempt was created for stale-state troubleshooting.
 }
 
+// artist models the subset of Spotify artist JSON needed for display.
 type artist struct {
-	Name string `json:"name"`
+	Name string `json:"name"` // Name is the human-readable artist name shown in KUAL and FBInk views.
 }
 
+// albumImage models a Spotify album artwork candidate.
 type albumImage struct {
-	URL    string `json:"url"`
-	Height int    `json:"height"`
-	Width  int    `json:"width"`
+	URL    string `json:"url"`    // URL is the HTTPS image URL downloaded before FBInk rendering.
+	Height int    `json:"height"` // Height is Spotify's image height metadata in pixels.
+	Width  int    `json:"width"`  // Width is Spotify's image width metadata in pixels and is used to choose a Kindle-friendly cover size.
 }
 
+// album models the subset of Spotify album JSON used in now-playing output.
 type album struct {
-	Name   string       `json:"name"`
-	Images []albumImage `json:"images"`
+	Name   string       `json:"name"`   // Name is the album title or release title displayed under the track.
+	Images []albumImage `json:"images"` // Images are Spotify-provided cover artwork variants ordered by Spotify's response.
 }
 
+// track models the current Spotify item returned by GET /v1/me/player.
 type track struct {
-	Name       string   `json:"name"`
-	Artists    []artist `json:"artists"`
-	Album      album    `json:"album"`
-	DurationMS int      `json:"duration_ms"`
+	Name       string   `json:"name"`        // Name is the current track title.
+	Artists    []artist `json:"artists"`     // Artists are the credited artists joined for display.
+	Album      album    `json:"album"`       // Album contains cover art and release metadata for the current track.
+	DurationMS int      `json:"duration_ms"` // DurationMS is the total track duration in milliseconds.
 }
 
+// device models the active Spotify playback device.
 type device struct {
-	ID            string `json:"id"`
-	Name          string `json:"name"`
-	Type          string `json:"type"`
-	IsActive      bool   `json:"is_active"`
-	VolumePercent int    `json:"volume_percent"`
+	ID            string `json:"id"`             // ID is Spotify's device identifier used by transfer playback calls.
+	Name          string `json:"name"`           // Name is the device label shown to the user.
+	Type          string `json:"type"`           // Type is Spotify's device class, such as Computer, Smartphone, or Speaker.
+	IsActive      bool   `json:"is_active"`      // IsActive reports whether Spotify currently routes playback to this device.
+	VolumePercent int    `json:"volume_percent"` // VolumePercent is the device volume used for display and +/-10 adjustments.
 }
 
+// playbackContext models the optional album, artist, playlist, or collection context for the current track.
 type playbackContext struct {
-	Type         string            `json:"type"`
-	Href         string            `json:"href"`
-	URI          string            `json:"uri"`
-	ExternalURLs map[string]string `json:"external_urls"`
+	Type         string            `json:"type"`          // Type identifies the context kind returned by Spotify, such as playlist, album, artist, or collection.
+	Href         string            `json:"href"`          // Href is the Spotify Web API URL that can be queried for a display name when scopes permit it.
+	URI          string            `json:"uri"`           // URI is the spotify:* identifier used as a fallback context reference.
+	ExternalURLs map[string]string `json:"external_urls"` // ExternalURLs may include the public Spotify URL used as another fallback reference.
 }
 
+// playback models the response body from GET /v1/me/player.
 type playback struct {
-	Device       device          `json:"device"`
-	Shuffle      bool            `json:"shuffle_state"`
-	Repeat       string          `json:"repeat_state"`
-	ProgressMS   int             `json:"progress_ms"`
-	IsPlaying    bool            `json:"is_playing"`
-	CurrentTrack track           `json:"item"`
-	Context      playbackContext `json:"context"`
+	Device       device          `json:"device"`        // Device is the active playback device and volume state.
+	Shuffle      bool            `json:"shuffle_state"` // Shuffle reports Spotify's current shuffle setting.
+	Repeat       string          `json:"repeat_state"`  // Repeat is Spotify's repeat mode: off, track, or context.
+	ProgressMS   int             `json:"progress_ms"`   // ProgressMS is the current playback position in milliseconds.
+	IsPlaying    bool            `json:"is_playing"`    // IsPlaying determines whether play/pause actions should call pause or play.
+	CurrentTrack track           `json:"item"`          // CurrentTrack is the currently playing track object.
+	Context      playbackContext `json:"context"`       // Context is the album, playlist, artist, or collection containing the current track.
 }
 
+// uiButton describes one rectangular touch target in the eips fallback interface.
 type uiButton struct {
-	Label string
-	X1    int
-	Y1    int
-	X2    int
-	Y2    int
-	Do    func()
+	Label string // Label is the text rendered for the button and recorded in tap diagnostics.
+	X1    int    // X1 is the inclusive left edge in normalized framebuffer pixels.
+	Y1    int    // Y1 is the inclusive top edge in normalized framebuffer pixels.
+	X2    int    // X2 is the inclusive right edge in normalized framebuffer pixels.
+	Y2    int    // Y2 is the inclusive bottom edge in normalized framebuffer pixels.
+	Do    func() // Do is the callback invoked when a normalized tap lands inside the rectangle.
 }
 
+// uiTouchZone describes one fixed hotspot in the FBInk fullscreen now-playing layout.
 type uiTouchZone struct {
-	Action string
-	Label  string
-	X1     int
-	Y1     int
-	X2     int
-	Y2     int
+	Action string // Action is the internal control command emitted to the FBInk UI loop.
+	Label  string // Label is the diagnostic name used when logging hit testing.
+	X1     int    // X1 is the inclusive left edge in framebuffer pixels for the fixed FBInk layout.
+	Y1     int    // Y1 is the inclusive top edge in framebuffer pixels for the fixed FBInk layout.
+	X2     int    // X2 is the inclusive right edge in framebuffer pixels for the fixed FBInk layout.
+	Y2     int    // Y2 is the inclusive bottom edge in framebuffer pixels for the fixed FBInk layout.
 }
 
+// app holds the mutable process state for the native Kindle remote.
 type app struct {
-	base       string
-	cfg        config
-	client     *http.Client
-	status     string
-	err        string
-	state      playback
-	hasState   bool
-	buttons    []uiButton
-	mu         sync.Mutex
-	lastDraw   time.Time
-	lastAction time.Time
-	lastTap    string
-	quit       chan struct{}
+	base       string        // base is the extension root containing data, logs, bin, and www directories.
+	cfg        config        // cfg is the loaded runtime configuration, normalized during startup.
+	client     *http.Client  // client is the shared HTTP client used for Spotify, cover downloads, and OAuth token calls.
+	status     string        // status is the latest user-facing status line rendered to eips or FBInk.
+	err        string        // err is the latest user-facing error line rendered to eips or written for KUAL.
+	state      playback      // state is the last successful playback snapshot from GET /v1/me/player.
+	hasState   bool          // hasState reports whether state currently contains a successful playback snapshot.
+	buttons    []uiButton    // buttons is the current eips fallback hit-test table, rebuilt on draw.
+	mu         sync.Mutex    // mu protects status, err, state, hasState, buttons, lastDraw, and lastTap.
+	lastDraw   time.Time     // lastDraw throttles eips redraws to avoid excessive Kindle framebuffer refreshes.
+	lastAction time.Time     // lastAction debounces touch events from noisy input devices.
+	lastTap    string        // lastTap stores the most recent tap diagnostic displayed in the eips UI.
+	quit       chan struct{} // quit is closed or signaled to stop loops and clear the display.
 }
 
+// main initializes logging, configuration, routing mode, background loops, and the Kindle display lifecycle.
+// It chooses KUAL, FBInk fullscreen UI, or eips fallback mode from os.Args, starts callback/touch/refresh goroutines where needed, and waits for quit before clearing the screen.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func main() {
 	a := &app{
 		base:   detectBaseDir(),
@@ -183,6 +214,11 @@ func main() {
 	eipsClear()
 }
 
+// runFBInkUI runs the fullscreen FBInk now-playing interface.
+// It grabs touch devices, polls queued actions, dispatches playback controls, redraws the now-playing screen every eight seconds, and releases touch input on quit.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) runFBInkUI() {
 	log.Printf("Starting FBInk UI")
 	a.status = "Starting UI"
@@ -221,6 +257,11 @@ func (a *app) runFBInkUI() {
 	}
 }
 
+// fbinkExitMessage paints the final FBInk shutdown message.
+// It clears the Kindle display, writes two centered text lines, and logs that the fullscreen UI is returning to Kindle.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) fbinkExitMessage() {
 	eipsClear()
 	a.fbinkText(3, 12, "Closing Spotify Remote")
@@ -228,6 +269,11 @@ func (a *app) fbinkExitMessage() {
 	log.Printf("FBInk UI exit message drawn")
 }
 
+// uiControl maps a fullscreen UI action string to the matching Spotify control.
+// It dispatches play/pause, track navigation, volume, shuffle, or repeat commands through the KUAL helper methods.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) uiControl(action string) {
 	switch action {
 	case "playpause":
@@ -247,6 +293,11 @@ func (a *app) uiControl(action string) {
 	}
 }
 
+// drawFBInkNowPlaying fetches Spotify playback state and renders the fullscreen Kindle now-playing layout.
+// It calls GET /v1/me/player, handles no-device and expired-session states, downloads cover art when available, then updates FBInk/eips regions for title, controls, progress, volume, shuffle, repeat, and device.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) drawFBInkNowPlaying() {
 	var p playback
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
@@ -319,6 +370,11 @@ func (a *app) drawFBInkNowPlaying() {
 	log.Printf("FBInk UI drawn: %s / %s / %s", title, artist, contextLabel)
 }
 
+// playbackContextLabel builds a Kindle-friendly label for the Spotify playback context.
+// It handles collection, playlist, album, and artist contexts, optionally queries the context href for a name, and falls back to compact URI or URL references when text cannot render well.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) playbackContextLabel(p playback) string {
 	ctx := p.Context
 	if ctx.Type == "" && ctx.URI == "" && ctx.Href == "" && len(ctx.ExternalURLs) == 0 {
@@ -343,6 +399,11 @@ func (a *app) playbackContextLabel(p playback) string {
 	return prefix + ": unavailable"
 }
 
+// contextDisplay chooses the best visible context string for the Kindle display.
+// It prefers names with ASCII letters or digits, falls back to a compact Spotify reference, and otherwise reports the context as unavailable.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func contextDisplay(prefix, name, fallback string) string {
 	name = strings.TrimSpace(name)
 	if kindleVisible(name) {
@@ -354,6 +415,11 @@ func contextDisplay(prefix, name, fallback string) string {
 	return prefix + ": unavailable"
 }
 
+// kindleVisible reports whether text contains characters likely to survive Kindle eips rendering.
+// It scans for ASCII letters or digits because some Kindle font paths render non-Latin or symbol-only names poorly.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func kindleVisible(s string) bool {
 	for _, r := range s {
 		if r >= '0' && r <= '9' {
@@ -369,6 +435,11 @@ func kindleVisible(s string) bool {
 	return false
 }
 
+// spotifyResourceName looks up the display name for a Spotify resource href.
+// It sends an authorized GET to the supplied Spotify Web API endpoint and returns the trimmed name field, logging and suppressing lookup errors.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) spotifyResourceName(endpoint string) string {
 	var out struct {
 		Name string `json:"name"`
@@ -381,6 +452,11 @@ func (a *app) spotifyResourceName(endpoint string) string {
 	return strings.TrimSpace(out.Name)
 }
 
+// contextPrefix converts a Spotify context type into a display prefix.
+// It normalizes known values and title-cases unknown non-empty values for concise Kindle labels.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func contextPrefix(contextType string) string {
 	switch strings.ToLower(contextType) {
 	case "playlist":
@@ -399,6 +475,11 @@ func contextPrefix(contextType string) string {
 	}
 }
 
+// shortSpotifyURI extracts the final identifier segment from a spotify:* URI.
+// It splits on colons and returns the last part for fallback display.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func shortSpotifyURI(uri string) string {
 	parts := strings.Split(uri, ":")
 	if len(parts) == 0 {
@@ -407,6 +488,11 @@ func shortSpotifyURI(uri string) string {
 	return parts[len(parts)-1]
 }
 
+// shortSpotifyRef extracts a compact identifier from a Spotify URI or URL.
+// It handles spotify:* URIs, parses URL paths, and falls back to trimmed input when parsing fails.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func shortSpotifyRef(raw string) string {
 	if strings.HasPrefix(raw, "spotify:") {
 		return shortSpotifyURI(raw)
@@ -423,6 +509,11 @@ func shortSpotifyRef(raw string) string {
 	return strings.TrimSpace(raw)
 }
 
+// contextRef chooses the best compact fallback reference from playback context metadata.
+// It prefers Spotify URI, then API href, then the public external Spotify URL.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func contextRef(ctx playbackContext) string {
 	if ctx.URI != "" {
 		return shortSpotifyURI(ctx.URI)
@@ -436,6 +527,11 @@ func contextRef(ctx playbackContext) string {
 	return ""
 }
 
+// hasTokenScopes reports whether the saved token includes every requested Spotify scope.
+// It loads data/token.json, splits the granted scope string, and returns false when the token is missing or any required scope is absent.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) hasTokenScopes(required ...string) bool {
 	tok, err := a.loadToken()
 	if err != nil {
@@ -453,6 +549,11 @@ func (a *app) hasTokenScopes(required ...string) bool {
 	return true
 }
 
+// fbinkPath locates a usable FBInk binary on common Kindle installation paths.
+// It returns the first existing non-directory path or an empty string when FBInk is unavailable.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) fbinkPath() string {
 	for _, p := range []string{"/mnt/us/libkh/bin/fbink", "/mnt/us/koreader/fbink", "/mnt/us/extensions/MRInstaller/bin/KHF/fbink"} {
 		if st, err := os.Stat(p); err == nil && !st.IsDir() {
@@ -462,6 +563,11 @@ func (a *app) fbinkPath() string {
 	return ""
 }
 
+// fbinkClear clears the FBInk framebuffer and eips text layer.
+// It invokes FBInk full/keep clear modes when available, then runs eips -c as a compatibility fallback.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) fbinkClear() {
 	if p := a.fbinkPath(); p != "" {
 		_ = exec.Command(p, "-q", "-f", "-c").Run()
@@ -470,12 +576,22 @@ func (a *app) fbinkClear() {
 	eipsClear()
 }
 
+// fbinkText writes one FBInk text line at a Kindle row.
+// It shells out to FBInk with size, margin, and y-position arguments and ignores command failures so UI refresh can continue.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) fbinkText(size, row int, text string) {
 	if p := a.fbinkPath(); p != "" {
 		_ = exec.Command(p, "-q", "-S", strconv.Itoa(size), "-m", "-y", strconv.Itoa(row), text).Run()
 	}
 }
 
+// fbinkImage renders album artwork through FBInk.
+// It tries progressively simpler graphics arguments because FBInk builds differ in support for resize, dither, and flatten options.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) fbinkImage(path string) {
 	if p := a.fbinkPath(); p != "" {
 		attempts := [][]string{
@@ -495,6 +611,11 @@ func (a *app) fbinkImage(path string) {
 	}
 }
 
+// prepareCover downloads and stores the best Spotify album image for FBInk rendering.
+// It chooses a moderately sized image, downloads at most one megabyte, writes data/cover.jpg, logs failures, and returns an empty path when no usable cover is available.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) prepareCover(images []albumImage) string {
 	if len(images) == 0 {
 		return ""
@@ -543,6 +664,11 @@ func (a *app) prepareCover(images []albumImage) string {
 	return coverPath
 }
 
+// grabTouchLoop grabs candidate Linux input devices for exclusive fullscreen touch handling.
+// It probes /dev/input/event0..5 for absolute touch calibration, EVIOCGRABs usable devices, and starts readers that emit UI actions until done closes.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) grabTouchLoop(out chan<- string, done <-chan struct{}) {
 	var grabbed int
 	for _, path := range []string{"/dev/input/event0", "/dev/input/event1", "/dev/input/event2", "/dev/input/event3", "/dev/input/event4", "/dev/input/event5"} {
@@ -572,6 +698,11 @@ func (a *app) grabTouchLoop(out chan<- string, done <-chan struct{}) {
 	}
 }
 
+// readGrabbedTouch translates grabbed Linux input events into fullscreen UI actions.
+// It tracks ABS coordinates, touch-key or multitouch release events, normalizes the final contact point, and releases EVIOCGRAB when the loop exits.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) readGrabbedTouch(f *os.File, out chan<- string, done <-chan struct{}) {
 	defer f.Close()
 	defer ioctlGrab(f, false)
@@ -642,6 +773,11 @@ func (a *app) readGrabbedTouch(f *os.File, out chan<- string, done <-chan struct
 	}
 }
 
+// queueUIAction hit-tests a raw touch release against the FBInk fixed control zones.
+// It normalizes raw coordinates with calibration, logs the hit result, and non-blockingly queues the action so touch reading never stalls.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) queueUIAction(out chan<- string, rawX, rawY int, cal touchCalibration) {
 	nx, ny := a.normalizeTouch(rawX, rawY, cal)
 	action := ""
@@ -663,6 +799,11 @@ func (a *app) queueUIAction(out chan<- string, rawX, rawY int, cal touchCalibrat
 	}
 }
 
+// fbinkTouchZones returns the fixed framebuffer rectangles for the fullscreen FBInk layout.
+// The coordinates match the 1236x1648 Kindle layout used by drawFBInkNowPlaying for volume, shuffle, repeat, transport, and quit controls.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) fbinkTouchZones() []uiTouchZone {
 	return []uiTouchZone{
 		{Action: "voldown", Label: "vol-down-mid", X1: 420, Y1: 1020, X2: 585, Y2: 1168},
@@ -676,6 +817,11 @@ func (a *app) fbinkTouchZones() []uiTouchZone {
 	}
 }
 
+// runKUAL dispatches a single KUAL menu action.
+// It maps action names from extension menu items to login, status, playback, now-playing data, or recovery behavior and writes results for KUAL display.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) runKUAL(action string) {
 	log.Printf("KUAL action: %s", action)
 	switch action {
@@ -713,6 +859,11 @@ func (a *app) runKUAL(action string) {
 	}
 }
 
+// kualNowPlayingData writes a machine-readable now-playing snapshot for KUAL helpers.
+// It calls GET /v1/me/player, serializes success or error fields to data/nowplaying.json, and writes a short status message.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) kualNowPlayingData() {
 	var p playback
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
@@ -743,6 +894,11 @@ func (a *app) kualNowPlayingData() {
 	}
 }
 
+// kualPrint writes user-facing KUAL status output.
+// It prefixes lines with SPOTIFY REMOTE, logs each line, and writes data/status.txt for shell/menu scripts to display.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) kualPrint(lines ...string) {
 	var out []string
 	out = append(out, "SPOTIFY REMOTE")
@@ -755,6 +911,11 @@ func (a *app) kualPrint(lines ...string) {
 	_ = os.WriteFile(statusPath, []byte(strings.Join(out, "\n")+"\n"), 0644)
 }
 
+// kualStatus fetches and prints a compact Spotify playback status for KUAL.
+// It handles expired sessions, missing devices, and successful now-playing details including progress, volume, shuffle, and repeat.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) kualStatus() {
 	var p playback
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
@@ -779,26 +940,44 @@ func (a *app) kualStatus() {
 	)
 }
 
+// kualLogin performs an interactive KUAL/browser PKCE login.
+// It creates PKCE state, opens the Kindle browser to Spotify authorize, runs a temporary callback server for up to five minutes, exchanges the code, and prints the result.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) kualLogin() {
 	if !validClientID(a.cfg.ClientID) {
 		a.kualPrint("Spotify Client ID missing", "Edit data/config.json", "Use your own Client ID.", "Do not add a Client Secret.")
 		return
 	}
+	// The PKCE code_verifier must be high entropy because Spotify later compares it with the S256 challenge.
 	verifier := randomString(64)
+	// The OAuth state value binds the callback to this login attempt and prevents accepting an unrelated redirect.
 	state := randomString(24)
+	// Spotify requires the S256 code_challenge, which is SHA-256(verifier) encoded with unpadded base64url.
 	challenge := pkceChallenge(verifier)
+	// data/oauth.json persists the verifier and state until the callback supplies the authorization code.
 	if err := writeJSON(filepath.Join(a.base, "data", "oauth.json"), oauthState{State: state, CodeVerifier: verifier, CreatedAt: time.Now().Unix()}); err != nil {
 		a.kualPrint("Login state error", err.Error())
 		return
 	}
+	// url.Values performs the percent-encoding Spotify expects for the authorization or token request.
 	v := url.Values{}
+	// client_id identifies the public Spotify application registered for this redirect URI.
 	v.Set("client_id", a.cfg.ClientID)
+	// response_type=code starts the Authorization Code with PKCE flow rather than an implicit-token flow.
 	v.Set("response_type", "code")
+	// redirect_uri must exactly match the URI registered in the Spotify developer dashboard.
 	v.Set("redirect_uri", a.cfg.Redirect)
+	// code_challenge_method=S256 tells Spotify to verify the SHA-256 PKCE challenge.
 	v.Set("code_challenge_method", "S256")
+	// code_challenge is safe to send to Spotify because the secret verifier remains only in data/oauth.json.
 	v.Set("code_challenge", challenge)
+	// state is echoed by Spotify on redirect and checked before exchanging the authorization code.
 	v.Set("state", state)
+	// scope requests the playback and, in the native UI, playlist permissions needed by the remote.
 	v.Set("scope", scopes)
+	// The authorization URL sends the user to Spotify Accounts to approve the requested scopes.
 	authURL := "https://accounts.spotify.com/authorize?" + v.Encode()
 	a.kualPrint("Opening Spotify Login", "Waiting up to 5 minutes.", "Return to KUAL after login.")
 	openBrowser(authURL)
@@ -841,6 +1020,11 @@ func (a *app) kualLogin() {
 	}
 }
 
+// kualLoginFile creates an offline/manual KUAL login URL workflow.
+// It writes data/login_url.txt and a callback.txt template so the user can authorize on another device and paste the redirect URL back onto the Kindle.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) kualLoginFile() {
 	if !validClientID(a.cfg.ClientID) {
 		a.kualPrint("Spotify Client ID missing", "Edit data/config.json", "Use your own Client ID.", "Do not add a Client Secret.")
@@ -868,6 +1052,11 @@ func (a *app) kualLoginFile() {
 	)
 }
 
+// kualFinishLoginFile completes manual login from data/callback.txt.
+// It reads the pasted redirect URL or code, validates/parses it, exchanges it for tokens, updates callback.txt, and writes KUAL status.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) kualFinishLoginFile() {
 	path := filepath.Join(a.base, "data", "callback.txt")
 	raw, err := os.ReadFile(path)
@@ -888,24 +1077,47 @@ func (a *app) kualFinishLoginFile() {
 	a.kualPrint("Login complete", "Run Status next.")
 }
 
+// prepareAuthURL creates and persists a Spotify PKCE authorization URL.
+// It generates the verifier, challenge, and state, writes data/oauth.json, and returns the encoded Spotify /authorize URL.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) prepareAuthURL() (string, error) {
+	// The PKCE code_verifier must be high entropy because Spotify later compares it with the S256 challenge.
 	verifier := randomString(64)
+	// The OAuth state value binds the callback to this login attempt and prevents accepting an unrelated redirect.
 	state := randomString(24)
+	// Spotify requires the S256 code_challenge, which is SHA-256(verifier) encoded with unpadded base64url.
 	challenge := pkceChallenge(verifier)
+	// data/oauth.json persists the verifier and state until the callback supplies the authorization code.
 	if err := writeJSON(filepath.Join(a.base, "data", "oauth.json"), oauthState{State: state, CodeVerifier: verifier, CreatedAt: time.Now().Unix()}); err != nil {
 		return "", err
 	}
+	// url.Values performs the percent-encoding Spotify expects for the authorization or token request.
 	v := url.Values{}
+	// client_id identifies the public Spotify application registered for this redirect URI.
 	v.Set("client_id", a.cfg.ClientID)
+	// response_type=code starts the Authorization Code with PKCE flow rather than an implicit-token flow.
 	v.Set("response_type", "code")
+	// redirect_uri must exactly match the URI registered in the Spotify developer dashboard.
 	v.Set("redirect_uri", a.cfg.Redirect)
+	// code_challenge_method=S256 tells Spotify to verify the SHA-256 PKCE challenge.
 	v.Set("code_challenge_method", "S256")
+	// code_challenge is safe to send to Spotify because the secret verifier remains only in data/oauth.json.
 	v.Set("code_challenge", challenge)
+	// state is echoed by Spotify on redirect and checked before exchanging the authorization code.
 	v.Set("state", state)
+	// scope requests the playback and, in the native UI, playlist permissions needed by the remote.
 	v.Set("scope", scopes)
+	// The returned authorization URL is copied into the manual login file for use on another device.
 	return "https://accounts.spotify.com/authorize?" + v.Encode(), nil
 }
 
+// parseCallbackValue extracts an OAuth code and optional state from manual callback text.
+// It accepts a full redirect URL, a query string, or a raw code and rejects empty/template content.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func parseCallbackValue(raw string) (string, string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" || strings.HasPrefix(raw, "Paste Spotify redirect") {
@@ -933,6 +1145,11 @@ func parseCallbackValue(raw string) (string, string, error) {
 	return raw, "", nil
 }
 
+// kualPlayPause toggles Spotify playback for the active device.
+// It reads current playback state, handles no-device and expired-session errors, and calls pause or play according to is_playing.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) kualPlayPause() {
 	var p playback
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
@@ -954,6 +1171,11 @@ func (a *app) kualPlayPause() {
 	}
 }
 
+// kualControl sends one Spotify playback control and prints a KUAL result.
+// It invokes spotifyAPI with the supplied method, endpoint, and optional JSON body, translating session expiry into login instructions.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) kualControl(method, endpoint string, body io.Reader, label string) {
 	_, err := a.spotifyAPI(method, endpoint, body, nil)
 	if err != nil {
@@ -967,6 +1189,11 @@ func (a *app) kualControl(method, endpoint string, body io.Reader, label string)
 	a.kualPrint(label+" sent", "Run Status to refresh.")
 }
 
+// kualVolume adjusts active Spotify device volume by a delta.
+// It reads current device volume, clamps the new value to 0..100, and calls Spotify volume control with user-modify-playback-state scope.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) kualVolume(delta int) {
 	var p playback
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
@@ -985,6 +1212,11 @@ func (a *app) kualVolume(delta int) {
 	a.kualControl(http.MethodPut, "https://api.spotify.com/v1/me/player/volume?volume_percent="+strconv.Itoa(v), nil, "Volume "+strconv.Itoa(v))
 }
 
+// kualToggleShuffle flips Spotify shuffle state.
+// It reads the current shuffle flag and sends PUT /v1/me/player/shuffle with the opposite state.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) kualToggleShuffle() {
 	var p playback
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
@@ -1002,6 +1234,11 @@ func (a *app) kualToggleShuffle() {
 	a.kualControl(http.MethodPut, "https://api.spotify.com/v1/me/player/shuffle?state="+strconv.FormatBool(!p.Shuffle), nil, "Shuffle")
 }
 
+// kualToggleRepeat cycles Spotify repeat mode.
+// It reads repeat_state and cycles off to context to track to off through PUT /v1/me/player/repeat.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) kualToggleRepeat() {
 	var p playback
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
@@ -1025,6 +1262,11 @@ func (a *app) kualToggleRepeat() {
 	a.kualControl(http.MethodPut, "https://api.spotify.com/v1/me/player/repeat?state="+next, nil, "Repeat "+next)
 }
 
+// detectBaseDir finds the extension root directory.
+// It prefers the executable parent when running from bin, falls back to the working directory, and finally returns dot.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func detectBaseDir() string {
 	if exe, err := os.Executable(); err == nil {
 		dir := filepath.Dir(exe)
@@ -1038,6 +1280,11 @@ func detectBaseDir() string {
 	return "."
 }
 
+// setupLog configures package logging for the native runtime.
+// It creates logs/spotify-remote.log when possible and directs log output there with timestamps and short file names.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) setupLog() {
 	p := filepath.Join(a.base, "logs", "spotify-remote.log")
 	_ = os.MkdirAll(filepath.Dir(p), 0755)
@@ -1047,6 +1294,11 @@ func (a *app) setupLog() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 }
 
+// loadConfig reads and normalizes data/config.json.
+// It starts from defaults, creates a template when the file is missing, applies fallback values, and returns read/write errors.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) loadConfig() error {
 	a.cfg = defaultConfig()
 	path := filepath.Join(a.base, "data", "config.json")
@@ -1062,6 +1314,11 @@ func (a *app) loadConfig() error {
 	return err
 }
 
+// defaultConfig returns conservative native Kindle defaults.
+// It sets OAuth, screen, touch, eips, and button values that match the target Kindle layout until data/config.json overrides them.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func defaultConfig() config {
 	return config{
 		ClientID:          placeholderSpotifyClientID,
@@ -1083,6 +1340,11 @@ func defaultConfig() config {
 	}
 }
 
+// normalizeConfig repairs zero or invalid config values after loading JSON.
+// It fills missing redirect, port, refresh, screen, touch, eips, and button settings without overwriting intentional non-zero values.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) normalizeConfig() {
 	if a.cfg.Redirect == "" {
 		a.cfg.Redirect = "http://127.0.0.1:8787/callback"
@@ -1124,10 +1386,20 @@ func (a *app) normalizeConfig() {
 	}
 }
 
+// boolPtr returns a pointer to a bool literal for config defaults.
+// It is used where a nil pointer has semantic meaning distinct from false.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func boolPtr(v bool) *bool {
 	return &v
 }
 
+// readJSON loads a JSON file into the supplied destination.
+// It reads the whole file, treats empty or whitespace-only files as no-op defaults, and returns filesystem or JSON parse errors.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func readJSON(path string, out any) error {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -1139,6 +1411,11 @@ func readJSON(path string, out any) error {
 	return json.Unmarshal(b, out)
 }
 
+// writeJSON atomically prepares the parent directory and writes indented JSON.
+// It creates directories, marshals with stable indentation, appends a newline, and stores private state with owner-readable permissions.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func writeJSON(path string, v any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
@@ -1150,6 +1427,11 @@ func writeJSON(path string, v any) error {
 	return os.WriteFile(path, append(b, '\n'), 0600)
 }
 
+// refreshLoop polls Spotify playback state until the app quits.
+// It ticks at the configured refresh interval with an eight-second floor, refreshes immediately, and exits when quit is signaled.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) refreshLoop() {
 	t := time.NewTicker(time.Duration(max(a.cfg.RefreshSec, 8)) * time.Second)
 	defer t.Stop()
@@ -1164,6 +1446,11 @@ func (a *app) refreshLoop() {
 	}
 }
 
+// refresh fetches playback state and redraws the eips fallback UI.
+// It calls GET /v1/me/player, updates protected app state for success, no-device, or error cases, and renders while holding the UI lock.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) refresh() {
 	var p playback
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
@@ -1189,6 +1476,11 @@ func (a *app) refresh() {
 	a.drawLocked()
 }
 
+// control handles one eips fallback UI action.
+// It maps action strings to Spotify endpoints or local views, sends the selected request, updates status/error state, redraws, waits briefly, and refreshes playback.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) control(action string) {
 	endpoint := ""
 	method := http.MethodPut
@@ -1257,6 +1549,11 @@ func (a *app) control(action string) {
 	a.refresh()
 }
 
+// showDevices displays available Spotify playback devices and installs device-transfer buttons.
+// It calls GET /v1/me/player/devices, draws the device list with eips, and assigns touch callbacks that PUT /v1/me/player to transfer playback.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) showDevices() {
 	var out struct {
 		Devices []device `json:"devices"`
@@ -1310,6 +1607,11 @@ func (a *app) showDevices() {
 	eips(38, 40, "Back")
 }
 
+// login starts the eips fallback PKCE login flow.
+// It validates the client ID, generates PKCE verifier/challenge/state, writes oauth.json, builds the Spotify authorize URL, and opens the Kindle browser.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) login() {
 	a.mu.Lock()
 	a.status = "Opening Spotify login"
@@ -1323,9 +1625,13 @@ func (a *app) login() {
 		a.mu.Unlock()
 		return
 	}
+	// The PKCE code_verifier must be high entropy because Spotify later compares it with the S256 challenge.
 	verifier := randomString(64)
+	// The OAuth state value binds the callback to this login attempt and prevents accepting an unrelated redirect.
 	state := randomString(24)
+	// Spotify requires the S256 code_challenge, which is SHA-256(verifier) encoded with unpadded base64url.
 	challenge := pkceChallenge(verifier)
+	// data/oauth.json persists the verifier and state until the callback supplies the authorization code.
 	if err := writeJSON(filepath.Join(a.base, "data", "oauth.json"), oauthState{State: state, CodeVerifier: verifier, CreatedAt: time.Now().Unix()}); err != nil {
 		a.mu.Lock()
 		a.err = err.Error()
@@ -1333,19 +1639,33 @@ func (a *app) login() {
 		a.mu.Unlock()
 		return
 	}
+	// url.Values performs the percent-encoding Spotify expects for the authorization or token request.
 	v := url.Values{}
+	// client_id identifies the public Spotify application registered for this redirect URI.
 	v.Set("client_id", a.cfg.ClientID)
+	// response_type=code starts the Authorization Code with PKCE flow rather than an implicit-token flow.
 	v.Set("response_type", "code")
+	// redirect_uri must exactly match the URI registered in the Spotify developer dashboard.
 	v.Set("redirect_uri", a.cfg.Redirect)
+	// code_challenge_method=S256 tells Spotify to verify the SHA-256 PKCE challenge.
 	v.Set("code_challenge_method", "S256")
+	// code_challenge is safe to send to Spotify because the secret verifier remains only in data/oauth.json.
 	v.Set("code_challenge", challenge)
+	// state is echoed by Spotify on redirect and checked before exchanging the authorization code.
 	v.Set("state", state)
+	// scope requests the playback and, in the native UI, playlist permissions needed by the remote.
 	v.Set("scope", scopes)
+	// The authorization URL sends the user to Spotify Accounts to approve the requested scopes.
 	authURL := "https://accounts.spotify.com/authorize?" + v.Encode()
 	log.Printf("auth url: %s", authURL)
 	openBrowser(authURL)
 }
 
+// callbackServer serves the local OAuth callback endpoint for the eips fallback UI.
+// It listens on 127.0.0.1, handles Spotify error or code callbacks, exchanges valid codes, updates UI state, and starts a refresh after login.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) callbackServer() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
@@ -1373,6 +1693,11 @@ func (a *app) callbackServer() {
 	_ = http.ListenAndServe(addr, mux)
 }
 
+// setError records and displays a UI error.
+// It updates protected app state and redraws the eips fallback screen.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) setError(msg string) {
 	a.mu.Lock()
 	a.err = msg
@@ -1380,39 +1705,63 @@ func (a *app) setError(msg string) {
 	a.mu.Unlock()
 }
 
+// exchangeCode exchanges a Spotify authorization code for tokens.
+// It validates the saved PKCE state, posts authorization_code data to /api/token, stamps AuthorizedAt and ExpiresAt, and writes data/token.json.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) exchangeCode(code, state string) error {
 	if code == "" {
 		return errors.New("missing authorization code")
 	}
 	var st oauthState
+	// The token exchange must reload the original PKCE verifier and state from data/oauth.json.
 	if err := readJSON(filepath.Join(a.base, "data", "oauth.json"), &st); err != nil {
 		return errors.New("login state missing; tap Login again")
 	}
+	// A mismatched OAuth state means the redirect does not belong to the saved login attempt.
 	if st.State != "" && state != "" && st.State != state {
 		return errors.New("OAuth state mismatch")
 	}
 	form := url.Values{}
+	// Spotify token requests for public PKCE clients include client_id but no client secret.
 	form.Set("client_id", a.cfg.ClientID)
+	// grant_type=authorization_code exchanges the one-time callback code for access and refresh tokens.
 	form.Set("grant_type", "authorization_code")
+	// code is the short-lived authorization code received on the Spotify redirect.
 	form.Set("code", code)
+	// Spotify verifies redirect_uri during token exchange against the authorization request.
 	form.Set("redirect_uri", a.cfg.Redirect)
+	// code_verifier proves this process owns the secret used to derive the earlier code_challenge.
 	form.Set("code_verifier", st.CodeVerifier)
 	var tok tokenFile
+	// POST /api/token returns the access token, refresh token, granted scopes, and expiry metadata.
 	if err := a.spotifyForm(spotifyTokenEndpoint, form, "", &tok); err != nil {
 		return err
 	}
+	// AuthorizedAt is written once after successful authorization and then preserved across refreshes.
 	if tok.AuthorizedAt == 0 {
+		// AuthorizedAt records when this login session was first established.
 		tok.AuthorizedAt = time.Now().Unix()
 	}
+	// ExpiresAt subtracts a 60-second margin so requests refresh before Spotify rejects the bearer token.
 	tok.ExpiresAt = time.Now().Unix() + int64(tok.ExpiresIn) - 60
+	// data/token.json stores the newly authorized token set for future Spotify API calls.
 	return writeJSON(filepath.Join(a.base, "data", "token.json"), &tok)
 }
 
+// loadToken returns a valid Spotify access token, refreshing it when needed.
+// It reads data/token.json, checks ExpiresAt, posts refresh_token to /api/token when stale, preserves refresh token/scope/AuthorizedAt, clears invalid_grant sessions, and rewrites token.json.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) loadToken() (tokenFile, error) {
 	var tok tokenFile
+	// loadToken reads data/token.json before every Spotify API call so controls survive process restarts.
 	if err := readJSON(filepath.Join(a.base, "data", "token.json"), &tok); err != nil || tok.AccessToken == "" {
 		return tok, errors.New("Token missing; tap Login")
 	}
+	// A future ExpiresAt means the bearer token can be reused without contacting Spotify Accounts.
 	if time.Now().Unix() < tok.ExpiresAt {
 		return tok, nil
 	}
@@ -1420,32 +1769,47 @@ func (a *app) loadToken() (tokenFile, error) {
 		return tok, errors.New("Token expired; tap Login")
 	}
 	form := url.Values{}
+	// Spotify token requests for public PKCE clients include client_id but no client secret.
 	form.Set("client_id", a.cfg.ClientID)
+	// grant_type=refresh_token asks Spotify Accounts for a new access token using the saved refresh token.
 	form.Set("grant_type", "refresh_token")
+	// refresh_token is the long-lived credential stored in data/token.json.
 	form.Set("refresh_token", tok.RefreshToken)
 	var refreshed tokenFile
 	if err := a.spotifyForm(spotifyTokenEndpoint, form, "", &refreshed); err != nil {
+		// invalid_grant is terminal for this saved refresh token, so the only correct recovery is deleting token.json and logging in again.
 		if errors.Is(err, errInvalidGrant) {
+			// data/token.json is removed so later requests cannot keep retrying a revoked or expired refresh token.
 			_ = a.clearToken()
 			return tok, errSessionExpired
 		}
 		return tok, fmt.Errorf("Token expired: %w", err)
 	}
 	if refreshed.RefreshToken == "" {
+		// Spotify may omit refresh_token on refresh; keep the previous one when that happens.
 		refreshed.RefreshToken = tok.RefreshToken
 	}
 	if refreshed.Scope == "" {
+		// Spotify may omit scope on refresh; keep the original granted scope list for later scope checks.
 		refreshed.Scope = tok.Scope
 	}
+	// Refresh does not create a new login session, so preserve the original authorization timestamp.
 	refreshed.AuthorizedAt = tok.AuthorizedAt
 	refreshed.ExpiresAt = time.Now().Unix() + int64(refreshed.ExpiresIn) - 60
+	// The refreshed token replaces data/token.json so subsequent API calls use the new access token.
 	if err := writeJSON(filepath.Join(a.base, "data", "token.json"), &refreshed); err != nil {
 		return tok, err
 	}
 	return refreshed, nil
 }
 
+// clearToken deletes the persisted Spotify token file.
+// It removes data/token.json and treats an already-missing file as success.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) clearToken() error {
+	// clearToken deletes data/token.json after invalid_grant or explicit session cleanup.
 	err := os.Remove(filepath.Join(a.base, "data", "token.json"))
 	if err == nil || os.IsNotExist(err) {
 		return nil
@@ -1453,6 +1817,11 @@ func (a *app) clearToken() error {
 	return err
 }
 
+// spotifyAPI sends an authorized Spotify Web API request.
+// It loads or refreshes a bearer token, builds the request, sets JSON content type for request bodies, decodes optional JSON responses, and maps non-2xx statuses through spotifyError.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) spotifyAPI(method, endpoint string, body io.Reader, out any) (int, error) {
 	tok, err := a.loadToken()
 	if err != nil {
@@ -1462,8 +1831,10 @@ func (a *app) spotifyAPI(method, endpoint string, body io.Reader, out any) (int,
 	if err != nil {
 		return 0, err
 	}
+	// Spotify Web API endpoints authenticate with the current access token in the Bearer header.
 	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
 	if body != nil {
+		// Spotify playback control endpoints expect JSON when a request body is present.
 		req.Header.Set("Content-Type", "application/json")
 	}
 	resp, err := a.client.Do(req)
@@ -1486,11 +1857,17 @@ func (a *app) spotifyAPI(method, endpoint string, body io.Reader, out any) (int,
 	return resp.StatusCode, nil
 }
 
+// spotifyForm posts a form-encoded request to Spotify Accounts.
+// It sends application/x-www-form-urlencoded data to /api/token or another endpoint, applies an optional bearer token, decodes the JSON response, and maps non-2xx statuses.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) spotifyForm(endpoint string, form url.Values, bearer string, out any) error {
 	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return err
 	}
+	// Spotify Accounts /api/token requires form-encoded OAuth parameters.
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	if bearer != "" {
 		req.Header.Set("Authorization", "Bearer "+bearer)
@@ -1507,13 +1884,20 @@ func (a *app) spotifyForm(endpoint string, form url.Values, bearer string, out a
 	return json.Unmarshal(body, out)
 }
 
+// spotifyError converts Spotify HTTP error responses into user-facing errors.
+// It detects invalid_grant as a sentinel for terminal session expiry and maps common playback statuses such as 401, 403, 404, and 429.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func spotifyError(status int, body []byte) error {
 	text := string(body)
 	var wrapped struct {
 		Error any `json:"error"`
 	}
 	_ = json.Unmarshal(body, &wrapped)
+	// Spotify returns HTTP 400 with invalid_grant when an authorization code or refresh token is invalid, expired, or revoked.
 	if status == http.StatusBadRequest && spotifyErrorCode(wrapped.Error) == "invalid_grant" {
+		// errInvalidGrant lets token lifecycle callers distinguish terminal auth failure from transient HTTP errors.
 		return errInvalidGrant
 	}
 	switch status {
@@ -1535,6 +1919,11 @@ func spotifyError(status int, body []byte) error {
 	return fmt.Errorf("Spotify API error HTTP %d: %.140s", status, text)
 }
 
+// spotifyErrorCode extracts a Spotify error code or message from decoded JSON.
+// It handles both OAuth string errors and Web API object errors.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func spotifyErrorCode(v any) string {
 	switch e := v.(type) {
 	case string:
@@ -1547,12 +1936,22 @@ func spotifyErrorCode(v any) string {
 	return ""
 }
 
+// draw redraws the eips fallback UI under lock.
+// It acquires the app mutex and delegates to drawLocked.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) draw() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.drawLocked()
 }
 
+// drawLocked renders the complete eips fallback interface.
+// It throttles rapid redraws, clears the screen, writes status, playback, tap diagnostics, and button rows, and rebuilds the touch button table.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) drawLocked() {
 	if time.Since(a.lastDraw) < 200*time.Millisecond {
 		return
@@ -1600,16 +1999,31 @@ func (a *app) drawLocked() {
 	}
 }
 
+// button constructs one full-width eips fallback touch button.
+// It converts a button slot into framebuffer coordinates using configured top, height, and gap values.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) button(slot int, label string, do func()) uiButton {
 	step := a.cfg.ButtonHeight + a.cfg.ButtonGap
 	y1 := a.cfg.ButtonTop + slot*step
 	return uiButton{Label: label, X1: 0, Y1: y1, X2: a.cfg.ScreenWidth, Y2: y1 + a.cfg.ButtonHeight, Do: do}
 }
 
+// eipsClear clears the Kindle eips text display.
+// It shells out to eips -c and ignores errors because some modes may not have eips available.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func eipsClear() {
 	_ = exec.Command("eips", "-c").Run()
 }
 
+// eips writes one text string at an eips row and column.
+// It substitutes a space for empty text because eips needs an argument to update a cell.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func eips(row, col int, text string) {
 	if text == "" {
 		text = " "
@@ -1617,26 +2031,38 @@ func eips(row, col int, text string) {
 	_ = exec.Command("eips", strconv.Itoa(row), strconv.Itoa(col), text).Run()
 }
 
+// openBrowser asks the Kindle application manager to open the browser.
+// It sends a lipc-set-prop command with an app://com.lab126.browser URL containing the OAuth authorization URL.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func openBrowser(raw string) {
 	_ = exec.Command("lipc-set-prop", "com.lab126.appmgrd", "start", "app://com.lab126.browser?url="+raw).Run()
 }
 
+// inputEvent mirrors Linux struct input_event as emitted by /dev/input/event* devices.
 type inputEvent struct {
-	Sec   int32
-	Usec  int32
-	Type  uint16
-	Code  uint16
-	Value int32
+	Sec   int32  // Sec is the event timestamp seconds field supplied by the kernel and ignored by this UI.
+	Usec  int32  // Usec is the event timestamp microseconds field supplied by the kernel and ignored by this UI.
+	Type  uint16 // Type is the Linux input event class, such as EV_ABS, EV_KEY, or EV_SYN.
+	Code  uint16 // Code is the event-specific identifier, such as ABS_X, ABS_MT_POSITION_X, or BTN_TOUCH.
+	Value int32  // Value is the raw coordinate, key state, tracking ID, or sync value associated with Type and Code.
 }
 
+// touchCalibration stores raw-to-screen mapping metadata for a Kindle touch device.
 type touchCalibration struct {
-	MinX   int
-	MaxX   int
-	MinY   int
-	MaxY   int
-	Source string
+	MinX   int    // MinX is the smallest raw X value expected from the touch controller.
+	MaxX   int    // MaxX is the largest raw X value expected from the touch controller.
+	MinY   int    // MinY is the smallest raw Y value expected from the touch controller.
+	MaxY   int    // MaxY is the largest raw Y value expected from the touch controller.
+	Source string // Source identifies whether calibration came from config or kernel EVIOCGABS metadata.
 }
 
+// touchLoop discovers Linux input devices for the eips fallback UI.
+// It scans /dev/input/event* periodically, starts one reader per newly discovered device, and keeps running for the process lifetime.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) touchLoop() {
 	opened := make(map[string]bool)
 	for {
@@ -1654,6 +2080,11 @@ func (a *app) touchLoop() {
 	}
 }
 
+// readInput reads raw Linux input events and converts touch releases into taps.
+// It tracks ABS_X/ABS_Y or multitouch coordinates, touch key/tracking release semantics, and calls tap after SYN_REPORT finalizes an event frame.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) readInput(path string) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -1722,6 +2153,11 @@ func (a *app) readInput(path string) {
 	}
 }
 
+// touchCalibration chooses raw touch calibration ranges for an input device.
+// It starts with config ranges, optionally queries kernel EVIOCGABS metadata, logs the selected source, and falls back to config on failure.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) touchCalibration(f *os.File, path string) touchCalibration {
 	cal := touchCalibration{
 		MinX:   a.cfg.TouchMinX,
@@ -1742,6 +2178,11 @@ func (a *app) touchCalibration(f *os.File, path string) touchCalibration {
 	return cal
 }
 
+// tap debounces and dispatches a normalized touch coordinate.
+// It scales raw coordinates to screen pixels, snapshots current buttons under lock, invokes the hit button callback, and records hit/miss diagnostics.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) tap(rawX, rawY int, cal touchCalibration) {
 	if time.Since(a.lastAction) < 500*time.Millisecond {
 		return
@@ -1764,6 +2205,11 @@ func (a *app) tap(rawX, rawY int, cal touchCalibration) {
 	a.setLastTap(fmt.Sprintf("Miss raw=%d,%d xy=%d,%d", rawX, rawY, x, y), true)
 }
 
+// setLastTap records the most recent tap diagnostic.
+// It optionally forces a redraw by clearing lastDraw before drawing under lock.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) setLastTap(msg string, redraw bool) {
 	a.mu.Lock()
 	a.lastTap = msg
@@ -1774,6 +2220,11 @@ func (a *app) setLastTap(msg string, redraw bool) {
 	a.mu.Unlock()
 }
 
+// normalizeTouch maps raw input coordinates into framebuffer pixels.
+// It applies optional axis swap, scales each axis from raw calibration range to screen size, applies configured inversion, and clamps to screen bounds.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) normalizeTouch(rawX, rawY int, cal touchCalibration) (int, int) {
 	x, y := rawX, rawY
 	minX, maxX := cal.MinX, cal.MaxX
@@ -1793,6 +2244,11 @@ func (a *app) normalizeTouch(rawX, rawY int, cal touchCalibration) (int, int) {
 	return clamp(x, 0, a.cfg.ScreenWidth), clamp(y, 0, a.cfg.ScreenHeight)
 }
 
+// scaleTouchAxis linearly maps one raw touch axis to screen pixels.
+// It uses (value-min)*screen/(max-min) and clamps directly when calibration is invalid.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func scaleTouchAxis(v, rawMin, rawMax, screen int) int {
 	if rawMax <= rawMin {
 		return clamp(v, 0, screen)
@@ -1800,23 +2256,47 @@ func scaleTouchAxis(v, rawMin, rawMax, screen int) int {
 	return (v - rawMin) * screen / (rawMax - rawMin)
 }
 
+// validClientID reports whether a Spotify client ID has been configured.
+// It rejects empty IDs and the template placeholder prefix.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func validClientID(id string) bool {
 	return id != "" && !strings.HasPrefix(id, "PASTE_")
 }
 
+// randomString creates PKCE-safe random text.
+// It reads cryptographic random bytes, encodes them with unpadded base64url, and falls back to a timestamp only if the Kindle random source fails.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func randomString(n int) string {
 	b := make([]byte, n)
+	// PKCE verifier and OAuth state generation depend on crypto/rand for unpredictable bytes.
 	if _, err := rand.Read(b); err != nil {
 		return strconv.FormatInt(time.Now().UnixNano(), 36)
 	}
+	// The random bytes become URL-safe text suitable for PKCE verifier and state parameters.
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
+// pkceChallenge derives the Spotify S256 PKCE challenge from a verifier.
+// It SHA-256 hashes the verifier bytes and base64url-encodes the digest without padding as required by RFC 7636.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func pkceChallenge(verifier string) string {
+	// PKCE S256 hashes the exact verifier string bytes before base64url encoding.
 	sum := sha256.Sum256([]byte(verifier))
+	// RawURLEncoding intentionally omits padding because Spotify follows RFC 7636 base64url rules.
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
+// artistNames joins Spotify artist names for display.
+// It extracts each name and returns a comma-separated string.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func artistNames(in []artist) string {
 	var names []string
 	for _, a := range in {
@@ -1825,15 +2305,30 @@ func artistNames(in []artist) string {
 	return strings.Join(names, ", ")
 }
 
+// fmtProgress formats current and total playback time.
+// It converts both millisecond values to m:ss and joins them with a slash.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func fmtProgress(pos, total int) string {
 	return fmtMS(pos) + "/" + fmtMS(total)
 }
 
+// fmtMS formats milliseconds as m:ss.
+// It truncates to whole seconds and pads seconds to two digits.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func fmtMS(ms int) string {
 	sec := ms / 1000
 	return fmt.Sprintf("%d:%02d", sec/60, sec%60)
 }
 
+// playText converts playback state into display text.
+// It returns Playing for true and Paused for false.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func playText(v bool) string {
 	if v {
 		return "Playing"
@@ -1841,6 +2336,11 @@ func playText(v bool) string {
 	return "Paused"
 }
 
+// safe prepares text for constrained Kindle display columns.
+// It removes newlines, truncates by rune count, and appends an ellipsis when the text exceeds the requested width.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func safe(s string, n int) string {
 	s = strings.ReplaceAll(s, "\n", " ")
 	if len([]rune(s)) <= n {
@@ -1850,12 +2350,34 @@ func safe(s string, n int) string {
 	return string(r[:n-3]) + "..."
 }
 
+// xToCol converts framebuffer X pixels to an eips text column.
+// It divides by the configured eips column width.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) xToCol(x int) int { return x / a.cfg.EipsColWidth }
+
+// yToRow converts framebuffer Y pixels to an eips text row.
+// It divides by the configured eips row height.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) yToRow(y int) int { return y / a.cfg.EipsRowHeight }
+
+// rowToY converts an eips text row to a framebuffer Y coordinate.
+// It multiplies by the configured row height for touch hit boxes.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) rowToY(row int) int {
 	return row * a.cfg.EipsRowHeight
 }
 
+// clamp constrains an integer to an inclusive range.
+// It returns lo below the range, hi above the range, or the original value inside the range.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func clamp(v, lo, hi int) int {
 	if v < lo {
 		return lo
@@ -1866,6 +2388,11 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
+// max returns the larger of two integers.
+// It is used for default floors such as refresh interval and callback port.
+// Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
+// Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
+// Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func max(a, b int) int {
 	if a > b {
 		return a
