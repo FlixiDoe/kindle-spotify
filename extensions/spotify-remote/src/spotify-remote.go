@@ -25,6 +25,12 @@ const (
 	placeholderSpotifyClientID = "PASTE_SPOTIFY_CLIENT_ID_HERE"
 )
 
+var (
+	spotifyTokenEndpoint = "https://accounts.spotify.com/api/token"
+	errInvalidGrant      = errors.New("spotify invalid_grant")
+	errSessionExpired    = errors.New("Session expired; press Login")
+)
+
 type config struct {
 	ClientID       string `json:"client_id"`
 	RedirectURI    string `json:"redirect_uri"`
@@ -40,6 +46,7 @@ type tokenFile struct {
 	Scope        string `json:"scope"`
 	ExpiresIn    int    `json:"expires_in"`
 	ExpiresAt    int64  `json:"expires_at"`
+	AuthorizedAt int64  `json:"authorized_at,omitempty"`
 }
 
 type oauthState struct {
@@ -296,8 +303,11 @@ func (a *app) exchangeCode(code, state string) error {
 	form.Set("redirect_uri", a.cfg.RedirectURI)
 	form.Set("code_verifier", st.CodeVerifier)
 	var tok tokenFile
-	if err := a.spotifyForm("https://accounts.spotify.com/api/token", form, "", &tok); err != nil {
+	if err := a.spotifyForm(spotifyTokenEndpoint, form, "", &tok); err != nil {
 		return err
+	}
+	if tok.AuthorizedAt == 0 {
+		tok.AuthorizedAt = time.Now().Unix()
 	}
 	tok.ExpiresAt = time.Now().Unix() + int64(tok.ExpiresIn) - 60
 	if err := writeJSON(filepath.Join(a.baseDir, "data", "token.json"), &tok, 0600); err != nil {
@@ -321,11 +331,19 @@ func (a *app) loadToken() (tokenFile, error) {
 		}
 		refreshed, err := a.refreshToken(tok.RefreshToken)
 		if err != nil {
+			if errors.Is(err, errInvalidGrant) {
+				_ = a.clearToken()
+				return tok, errSessionExpired
+			}
 			return tok, fmt.Errorf("Token expired: %w", err)
 		}
 		if refreshed.RefreshToken == "" {
 			refreshed.RefreshToken = tok.RefreshToken
 		}
+		if refreshed.Scope == "" {
+			refreshed.Scope = tok.Scope
+		}
+		refreshed.AuthorizedAt = tok.AuthorizedAt
 		tok = refreshed
 		tok.ExpiresAt = time.Now().Unix() + int64(tok.ExpiresIn) - 60
 		if err := writeJSON(filepath.Join(a.baseDir, "data", "token.json"), &tok, 0600); err != nil {
@@ -341,8 +359,16 @@ func (a *app) refreshToken(refresh string) (tokenFile, error) {
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", refresh)
 	var tok tokenFile
-	err := a.spotifyForm("https://accounts.spotify.com/api/token", form, "", &tok)
+	err := a.spotifyForm(spotifyTokenEndpoint, form, "", &tok)
 	return tok, err
+}
+
+func (a *app) clearToken() error {
+	err := os.Remove(filepath.Join(a.baseDir, "data", "token.json"))
+	if err == nil || os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 func (a *app) spotifyForm(endpoint string, form url.Values, bearer string, out any) error {
@@ -405,6 +431,9 @@ func spotifyError(status int, body []byte) error {
 		Error any `json:"error"`
 	}
 	_ = json.Unmarshal(body, &wrapped)
+	if status == http.StatusBadRequest && spotifyErrorCode(wrapped.Error) == "invalid_grant" {
+		return errInvalidGrant
+	}
 	switch status {
 	case http.StatusUnauthorized:
 		return errors.New("Token expired")
@@ -424,10 +453,26 @@ func spotifyError(status int, body []byte) error {
 	return fmt.Errorf("Spotify API error HTTP %d: %.180s", status, text)
 }
 
+func spotifyErrorCode(v any) string {
+	switch e := v.(type) {
+	case string:
+		return e
+	case map[string]any:
+		if msg, ok := e["message"].(string); ok {
+			return msg
+		}
+	}
+	return ""
+}
+
 func (a *app) statusAPI(w http.ResponseWriter, r *http.Request) {
 	var state map[string]any
 	status, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &state)
 	if err != nil {
+		if errors.Is(err, errSessionExpired) {
+			respondAuthExpired(w)
+			return
+		}
 		respondErr(w, http.StatusBadGateway, "Failed to get playback state: "+err.Error())
 		return
 	}
@@ -441,6 +486,10 @@ func (a *app) statusAPI(w http.ResponseWriter, r *http.Request) {
 func (a *app) devicesAPI(w http.ResponseWriter, r *http.Request) {
 	var devices map[string]any
 	if _, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player/devices", nil, &devices); err != nil {
+		if errors.Is(err, errSessionExpired) {
+			respondAuthExpired(w)
+			return
+		}
 		respondErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -481,6 +530,10 @@ func (a *app) controlAPI(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := a.spotifyAPI(method, endpoint, body, nil); err != nil {
+		if errors.Is(err, errSessionExpired) {
+			respondAuthExpired(w)
+			return
+		}
 		respondErr(w, http.StatusBadGateway, err.Error())
 		return
 	}
@@ -552,4 +605,14 @@ func respondErr(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+func respondAuthExpired(w http.ResponseWriter) {
+	log.Printf("HTTP %d: session expired; login required", http.StatusUnauthorized)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnauthorized)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error":          "Session expired; please login again",
+		"login_required": true,
+	})
 }

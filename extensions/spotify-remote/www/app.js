@@ -31,11 +31,20 @@ function api(path, opts) {
       return {};
     }).then(function(body) {
       if (!res.ok || body.error) {
-        throw new Error(body.error || ("HTTP " + res.status));
+        var err = new Error(body.error || ("HTTP " + res.status));
+        err.loginRequired = !!body.login_required;
+        throw err;
       }
       return body;
     });
   });
+}
+
+function handleAPIError(err) {
+  setError(err.message);
+  if (err.loginRequired) {
+    show("manual", true);
+  }
 }
 
 function fmt(ms) {
@@ -54,7 +63,7 @@ function loadConfig() {
       show("setup", true);
     }
   }).catch(function(err) {
-    setError(err.message);
+    handleAPIError(err);
   });
 }
 
@@ -67,7 +76,7 @@ function saveConfig() {
     el("setupMsg").textContent = "Saved.";
     show("setup", false);
   }).catch(function(err) {
-    setError(err.message);
+    handleAPIError(err);
   });
 }
 
@@ -77,7 +86,7 @@ function login() {
     show("manual", true);
     window.location.href = data.auth_url;
   }).catch(function(err) {
-    setError(err.message);
+    handleAPIError(err);
   });
 }
 
@@ -90,7 +99,7 @@ function manualLogin() {
     show("manual", false);
     refresh();
   }).catch(function(err) {
-    setError(err.message);
+    handleAPIError(err);
   });
 }
 
@@ -100,7 +109,7 @@ function refresh() {
     setError("");
     renderState(state);
   }).catch(function(err) {
-    setError(err.message);
+    handleAPIError(err);
   });
 }
 
@@ -144,7 +153,7 @@ function control(action, extra) {
   }).then(function() {
     setTimeout(refresh, 900);
   }).catch(function(err) {
-    setError(err.message);
+    handleAPIError(err);
   });
 }
 

@@ -27,6 +27,12 @@ const (
 	placeholderSpotifyClientID = "PASTE_SPOTIFY_CLIENT_ID_HERE"
 )
 
+var (
+	spotifyTokenEndpoint = "https://accounts.spotify.com/api/token"
+	errInvalidGrant      = errors.New("spotify invalid_grant")
+	errSessionExpired    = errors.New("Session abgelaufen - bitte erneut einloggen")
+)
+
 type config struct {
 	ClientID          string `json:"client_id"`
 	Redirect          string `json:"redirect_uri"`
@@ -56,6 +62,7 @@ type tokenFile struct {
 	Scope        string `json:"scope"`
 	ExpiresIn    int    `json:"expires_in"`
 	ExpiresAt    int64  `json:"expires_at"`
+	AuthorizedAt int64  `json:"authorized_at,omitempty"`
 }
 
 type oauthState struct {
@@ -256,8 +263,13 @@ func (a *app) drawFBInkNowPlaying() {
 	coverPath := ""
 	deviceName := ""
 	if err != nil {
-		artist = "Failed to get playback state"
-		albumName = err.Error()
+		if errors.Is(err, errSessionExpired) {
+			artist = "Session abgelaufen"
+			albumName = "Bitte erneut einloggen"
+		} else {
+			artist = "Failed to get playback state"
+			albumName = err.Error()
+		}
 	} else if code == http.StatusNoContent {
 		artist = "No active Spotify device"
 	} else {
@@ -747,6 +759,10 @@ func (a *app) kualStatus() {
 	var p playback
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
 	if err != nil {
+		if errors.Is(err, errSessionExpired) {
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			return
+		}
 		a.kualPrint("ERROR", "Failed to get playback state:", err.Error(), "Use Login first.")
 		return
 	}
@@ -924,6 +940,10 @@ func (a *app) kualPlayPause() {
 		if err == nil {
 			err = errors.New("No active Spotify device")
 		}
+		if errors.Is(err, errSessionExpired) {
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			return
+		}
 		a.kualPrint("Play/Pause failed", err.Error())
 		return
 	}
@@ -937,6 +957,10 @@ func (a *app) kualPlayPause() {
 func (a *app) kualControl(method, endpoint string, body io.Reader, label string) {
 	_, err := a.spotifyAPI(method, endpoint, body, nil)
 	if err != nil {
+		if errors.Is(err, errSessionExpired) {
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			return
+		}
 		a.kualPrint(label+" failed", err.Error())
 		return
 	}
@@ -949,6 +973,10 @@ func (a *app) kualVolume(delta int) {
 	if err != nil || code == http.StatusNoContent {
 		if err == nil {
 			err = errors.New("No active Spotify device")
+		}
+		if errors.Is(err, errSessionExpired) {
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			return
 		}
 		a.kualPrint("Volume failed", err.Error())
 		return
@@ -964,6 +992,10 @@ func (a *app) kualToggleShuffle() {
 		if err == nil {
 			err = errors.New("No active Spotify device")
 		}
+		if errors.Is(err, errSessionExpired) {
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			return
+		}
 		a.kualPrint("Shuffle failed", err.Error())
 		return
 	}
@@ -976,6 +1008,10 @@ func (a *app) kualToggleRepeat() {
 	if err != nil || code == http.StatusNoContent {
 		if err == nil {
 			err = errors.New("No active Spotify device")
+		}
+		if errors.Is(err, errSessionExpired) {
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			return
 		}
 		a.kualPrint("Repeat failed", err.Error())
 		return
@@ -1134,7 +1170,12 @@ func (a *app) refresh() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err != nil {
-		a.err = "Failed to get playback state: " + err.Error()
+		if errors.Is(err, errSessionExpired) {
+			a.status = "Session abgelaufen - bitte erneut einloggen"
+			a.err = "Create Login URL -> Finish Login From callback.txt"
+		} else {
+			a.err = "Failed to get playback state: " + err.Error()
+		}
 		a.hasState = false
 	} else if code == http.StatusNoContent {
 		a.err = "No active Spotify device"
@@ -1199,7 +1240,13 @@ func (a *app) control(action string) {
 	_, err := a.spotifyAPI(method, endpoint, body, nil)
 	a.mu.Lock()
 	if err != nil {
-		a.err = err.Error()
+		if errors.Is(err, errSessionExpired) {
+			a.status = "Session abgelaufen - bitte erneut einloggen"
+			a.err = "Create Login URL -> Finish Login From callback.txt"
+			a.hasState = false
+		} else {
+			a.err = err.Error()
+		}
 	} else {
 		a.status = action + " sent"
 		a.err = ""
@@ -1218,7 +1265,13 @@ func (a *app) showDevices() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if err != nil {
-		a.err = err.Error()
+		if errors.Is(err, errSessionExpired) {
+			a.status = "Session abgelaufen - bitte erneut einloggen"
+			a.err = "Create Login URL -> Finish Login From callback.txt"
+			a.hasState = false
+		} else {
+			a.err = err.Error()
+		}
 		a.drawLocked()
 		return
 	}
@@ -1239,7 +1292,13 @@ func (a *app) showDevices() {
 			_, err := a.spotifyAPI(http.MethodPut, "https://api.spotify.com/v1/me/player", body, nil)
 			a.mu.Lock()
 			if err != nil {
-				a.err = err.Error()
+				if errors.Is(err, errSessionExpired) {
+					a.status = "Session abgelaufen - bitte erneut einloggen"
+					a.err = "Create Login URL -> Finish Login From callback.txt"
+					a.hasState = false
+				} else {
+					a.err = err.Error()
+				}
 			} else {
 				a.status = "Device selected"
 			}
@@ -1339,8 +1398,11 @@ func (a *app) exchangeCode(code, state string) error {
 	form.Set("redirect_uri", a.cfg.Redirect)
 	form.Set("code_verifier", st.CodeVerifier)
 	var tok tokenFile
-	if err := a.spotifyForm("https://accounts.spotify.com/api/token", form, "", &tok); err != nil {
+	if err := a.spotifyForm(spotifyTokenEndpoint, form, "", &tok); err != nil {
 		return err
+	}
+	if tok.AuthorizedAt == 0 {
+		tok.AuthorizedAt = time.Now().Unix()
 	}
 	tok.ExpiresAt = time.Now().Unix() + int64(tok.ExpiresIn) - 60
 	return writeJSON(filepath.Join(a.base, "data", "token.json"), &tok)
@@ -1362,7 +1424,11 @@ func (a *app) loadToken() (tokenFile, error) {
 	form.Set("grant_type", "refresh_token")
 	form.Set("refresh_token", tok.RefreshToken)
 	var refreshed tokenFile
-	if err := a.spotifyForm("https://accounts.spotify.com/api/token", form, "", &refreshed); err != nil {
+	if err := a.spotifyForm(spotifyTokenEndpoint, form, "", &refreshed); err != nil {
+		if errors.Is(err, errInvalidGrant) {
+			_ = a.clearToken()
+			return tok, errSessionExpired
+		}
 		return tok, fmt.Errorf("Token expired: %w", err)
 	}
 	if refreshed.RefreshToken == "" {
@@ -1371,11 +1437,20 @@ func (a *app) loadToken() (tokenFile, error) {
 	if refreshed.Scope == "" {
 		refreshed.Scope = tok.Scope
 	}
+	refreshed.AuthorizedAt = tok.AuthorizedAt
 	refreshed.ExpiresAt = time.Now().Unix() + int64(refreshed.ExpiresIn) - 60
 	if err := writeJSON(filepath.Join(a.base, "data", "token.json"), &refreshed); err != nil {
 		return tok, err
 	}
 	return refreshed, nil
+}
+
+func (a *app) clearToken() error {
+	err := os.Remove(filepath.Join(a.base, "data", "token.json"))
+	if err == nil || os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 func (a *app) spotifyAPI(method, endpoint string, body io.Reader, out any) (int, error) {
@@ -1434,6 +1509,13 @@ func (a *app) spotifyForm(endpoint string, form url.Values, bearer string, out a
 
 func spotifyError(status int, body []byte) error {
 	text := string(body)
+	var wrapped struct {
+		Error any `json:"error"`
+	}
+	_ = json.Unmarshal(body, &wrapped)
+	if status == http.StatusBadRequest && spotifyErrorCode(wrapped.Error) == "invalid_grant" {
+		return errInvalidGrant
+	}
 	switch status {
 	case http.StatusUnauthorized:
 		return errors.New("Token expired")
@@ -1451,6 +1533,18 @@ func spotifyError(status int, body []byte) error {
 		return fmt.Errorf("Spotify API error HTTP %d", status)
 	}
 	return fmt.Errorf("Spotify API error HTTP %d: %.140s", status, text)
+}
+
+func spotifyErrorCode(v any) string {
+	switch e := v.(type) {
+	case string:
+		return e
+	case map[string]any:
+		if msg, ok := e["message"].(string); ok {
+			return msg
+		}
+	}
+	return ""
 }
 
 func (a *app) draw() {
