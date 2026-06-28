@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -42,6 +43,14 @@ var (
 	errInvalidGrant = errors.New("spotify invalid_grant")
 	// errSessionExpired is the terminal refresh error returned to API handlers after invalid_grant invalidates the saved refresh token.
 	errSessionExpired = errors.New("Session expired; press Login")
+	// errRateLimited lets Spotify Web API callers distinguish HTTP 429 from other mapped Spotify errors.
+	errRateLimited = errors.New("spotify rate limited")
+
+	rateLimitMu                sync.Mutex
+	rateLimitActive            bool
+	rateLimitRetryAfterSeconds int
+	rateLimitRetryAt           time.Time
+	rateLimitNonRetryable      bool
 )
 
 // config describes data/config.json for the browser/server fallback runtime.
@@ -564,7 +573,7 @@ func (a *app) spotifyForm(endpoint string, form url.Values, bearer string, out a
 }
 
 // spotifyAPI sends an authorized Spotify Web API request.
-// It loads or refreshes a bearer token, builds the request, sets JSON content type for request bodies, decodes optional JSON responses, and maps non-2xx statuses through spotifyError.
+// It loads or refreshes a bearer token, builds the request, sets JSON content type for request bodies, detects Spotify Web API 429 responses, decodes optional JSON responses, and maps non-2xx statuses through spotifyError.
 // Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
 // Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
 // Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
@@ -573,7 +582,15 @@ func (a *app) spotifyAPI(method, endpoint string, body io.Reader, out any) (int,
 	if err != nil {
 		return 0, err
 	}
-	req, err := http.NewRequest(method, endpoint, body)
+	var payload []byte
+	if body != nil {
+		var readErr error
+		payload, readErr = io.ReadAll(body)
+		if readErr != nil {
+			return 0, readErr
+		}
+	}
+	req, err := http.NewRequest(method, endpoint, bytes.NewReader(payload))
 	if err != nil {
 		return 0, err
 	}
@@ -588,6 +605,17 @@ func (a *app) spotifyAPI(method, endpoint string, body io.Reader, out any) (int,
 		return 0, errors.New("Network blocked or Spotify API unreachable")
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests && !isSpotifyTokenEndpoint(endpoint) {
+		// Spotify returned 429; read Retry-After header (default 5 s if absent) and set errRateLimited, while explicitly excluding the token endpoint.
+		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
+		setRateLimit(retryAfter)
+		retryFn := func() error {
+			_, retryErr := a.spotifyAPI(method, endpoint, bytes.NewReader(payload), out)
+			return retryErr
+		}
+		scheduleRetry(retryFn, time.Duration(retryAfter)*time.Second)
+		return resp.StatusCode, errRateLimited
+	}
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode == http.StatusNoContent {
 		return resp.StatusCode, nil
@@ -600,7 +628,90 @@ func (a *app) spotifyAPI(method, endpoint string, body io.Reader, out any) (int,
 			return resp.StatusCode, err
 		}
 	}
+	clearRateLimit()
 	return resp.StatusCode, nil
+}
+
+// parseRetryAfter converts Spotify's Retry-After header into seconds.
+// It trims and parses the header as an integer second count, returning five seconds when Spotify omits the header or sends an invalid value.
+// Parameters: header is the raw Retry-After response header.
+// Return values: the positive retry delay in seconds.
+// Error conditions: malformed headers are handled by returning the default.
+// Side effects: none.
+func parseRetryAfter(header string) int {
+	seconds, err := strconv.Atoi(strings.TrimSpace(header))
+	if err != nil || seconds <= 0 {
+		return 5
+	}
+	return seconds
+}
+
+// isSpotifyTokenEndpoint reports whether an endpoint is Spotify Accounts /api/token.
+// It compares the request endpoint with spotifyTokenEndpoint and the production Accounts token URL so token refresh errors keep their separate invalid_grant handling.
+// Parameters: endpoint is the absolute URL being requested.
+// Return values: true when the endpoint is the OAuth token endpoint, otherwise false.
+// Error conditions: none.
+// Side effects: none.
+func isSpotifyTokenEndpoint(endpoint string) bool {
+	return endpoint == spotifyTokenEndpoint || endpoint == "https://accounts.spotify.com/api/token"
+}
+
+// setRateLimit stores the current Spotify Web API rate-limit window.
+// It records active=true, retryAfterSeconds, retryAt, and clears any prior non-retryable marker so callers can show the current wait.
+// Parameters: retryAfterSeconds is the parsed Retry-After delay in seconds.
+// Return values: none.
+// Error conditions: none.
+// Side effects: mutates package-level rate-limit state protected by rateLimitMu.
+func setRateLimit(retryAfterSeconds int) {
+	rateLimitMu.Lock()
+	defer rateLimitMu.Unlock()
+	// The package-level rate-limit state drives server 429 responses and browser countdown messages.
+	rateLimitActive = true
+	rateLimitRetryAfterSeconds = retryAfterSeconds
+	rateLimitRetryAt = time.Now().Add(time.Duration(retryAfterSeconds) * time.Second)
+	rateLimitNonRetryable = false
+}
+
+// clearRateLimit clears the current Spotify Web API rate-limit window.
+// It marks active=false, resets retry metadata, and removes the non-retryable marker after a successful retry or later successful request.
+// Parameters: none.
+// Return values: none.
+// Error conditions: none.
+// Side effects: mutates package-level rate-limit state protected by rateLimitMu.
+func clearRateLimit() {
+	rateLimitMu.Lock()
+	defer rateLimitMu.Unlock()
+	// A successful Spotify Web API call proves the current 429 wait is over.
+	rateLimitActive = false
+	rateLimitRetryAfterSeconds = 0
+	rateLimitRetryAt = time.Time{}
+	rateLimitNonRetryable = false
+}
+
+// scheduleRetry retries one failed Spotify call after the provided wait.
+// It starts a goroutine, waits retryAfter, invokes fn exactly once, marks a second errRateLimited result as non-retryable, and clears rate-limit state when fn succeeds.
+// Parameters: fn is the failed Spotify operation recreated by the caller; retryAfter is the delay before the single retry.
+// Return values: none.
+// Error conditions: a second errRateLimited result sets non-retryable state, while other errors are logged and left for the original caller-visible error path.
+// Side effects: starts one goroutine, invokes fn once, logs retry failures, and mutates package-level rate-limit state.
+func scheduleRetry(fn func() error, retryAfter time.Duration) {
+	go func() {
+		// This goroutine performs exactly one deferred retry after Spotify's Retry-After delay.
+		time.Sleep(retryAfter)
+		err := fn()
+		if errors.Is(err, errRateLimited) {
+			rateLimitMu.Lock()
+			// A second 429 is terminal for this scheduled retry; no further retry is started from this scheduler.
+			rateLimitNonRetryable = true
+			rateLimitMu.Unlock()
+			return
+		}
+		if err != nil {
+			log.Printf("scheduled Spotify retry failed: %v", err)
+			return
+		}
+		clearRateLimit()
+	}()
 }
 
 // spotifyError converts Spotify HTTP error responses into user-facing errors.
@@ -668,6 +779,10 @@ func (a *app) statusAPI(w http.ResponseWriter, r *http.Request) {
 			respondAuthExpired(w)
 			return
 		}
+		if errors.Is(err, errRateLimited) {
+			respondRateLimited(w)
+			return
+		}
 		respondErr(w, http.StatusBadGateway, "Failed to get playback state: "+err.Error())
 		return
 	}
@@ -688,6 +803,10 @@ func (a *app) devicesAPI(w http.ResponseWriter, r *http.Request) {
 	if _, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player/devices", nil, &devices); err != nil {
 		if errors.Is(err, errSessionExpired) {
 			respondAuthExpired(w)
+			return
+		}
+		if errors.Is(err, errRateLimited) {
+			respondRateLimited(w)
 			return
 		}
 		respondErr(w, http.StatusBadGateway, err.Error())
@@ -737,6 +856,10 @@ func (a *app) controlAPI(w http.ResponseWriter, r *http.Request) {
 	if _, err := a.spotifyAPI(method, endpoint, body, nil); err != nil {
 		if errors.Is(err, errSessionExpired) {
 			respondAuthExpired(w)
+			return
+		}
+		if errors.Is(err, errRateLimited) {
+			respondRateLimited(w)
 			return
 		}
 		respondErr(w, http.StatusBadGateway, err.Error())
@@ -840,6 +963,38 @@ func respondErr(w http.ResponseWriter, status int, msg string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(map[string]string{"error": msg})
+}
+
+// respondRateLimited writes the standard browser fallback Spotify rate-limit response.
+// It snapshots package-level rate-limit state, sets HTTP 429 and Retry-After, and returns JSON that the browser uses for a countdown without issuing its own retry.
+// Parameters: w is the HTTP response writer for the local browser fallback request.
+// Return values: none.
+// Error conditions: JSON encoding errors are ignored after headers are written.
+// Side effects: writes HTTP response headers/body and logs the rate-limit status.
+func respondRateLimited(w http.ResponseWriter) {
+	rateLimitMu.Lock()
+	retryAfter := rateLimitRetryAfterSeconds
+	if rateLimitActive && !rateLimitRetryAt.IsZero() {
+		retryAfter = int(time.Until(rateLimitRetryAt).Seconds())
+		if retryAfter < 1 {
+			retryAfter = 1
+		}
+	}
+	rateLimitMu.Unlock()
+	if retryAfter <= 0 {
+		retryAfter = 5
+	}
+	message := fmt.Sprintf("Spotify rate limited - retrying in %ds", retryAfter)
+	log.Printf("HTTP %d: %s", http.StatusTooManyRequests, message)
+	w.Header().Set("Content-Type", "application/json")
+	// Retry-After mirrors Spotify's wait so the browser can disable controls without polling during the wait.
+	w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
+	w.WriteHeader(http.StatusTooManyRequests)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"error":       "rate_limited",
+		"retry_after": retryAfter,
+		"message":     message,
+	})
 }
 
 // respondAuthExpired writes the standard expired-session response.
