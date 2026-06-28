@@ -7,7 +7,7 @@
         {
           "name": "Now Playing Display",
           "priority": 0,
-          "action": "sh /mnt/us/extensions/spotify-remote/nowplaying-launch.sh",
+          "action": "sh /mnt/us/extensions/spotify-remote/launch.sh",
           "params": "",
           "exitmenu": true,
           "status": false,
@@ -16,17 +16,17 @@
         {
           "name": "Create Login URL",
           "priority": 1,
-          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
-          "params": "kual login",
+          "action": "sh /mnt/us/extensions/spotify-remote/login-url.sh",
+          "params": "",
           "exitmenu": false,
           "status": false,
           "internal": "status Create Spotify Login URL"
         },
         {
-          "name": "Finish Login",
+          "name": "Finish Login From callback.txt",
           "priority": 2,
-          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
-          "params": "kual finish-login",
+          "action": "sh /mnt/us/extensions/spotify-remote/finish-login.sh",
+          "params": "",
           "exitmenu": false,
           "status": false,
           "internal": "status Finish Spotify Login"

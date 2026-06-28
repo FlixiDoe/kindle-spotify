@@ -213,8 +213,8 @@ func TestNativePendingPlaybackCallDiscardedWhenPlaybackEnds(t *testing.T) {
 	}
 }
 
-// TestKUALLoginMenuUsesDirectBinary verifies login actions keep the KUAL form that works on this Kindle.
-func TestKUALLoginMenuUsesDirectBinary(t *testing.T) {
+// TestKUALLoginMenuUsesWrapper verifies login actions use the KUAL wrapper form from the working d052921 build.
+func TestKUALLoginMenuUsesWrapper(t *testing.T) {
 	type menuItem struct {
 		Name   string     `json:"name"`
 		Action string     `json:"action"`
@@ -239,15 +239,13 @@ func TestKUALLoginMenuUsesDirectBinary(t *testing.T) {
 			params string
 		}{
 			"Now Playing Display": {
-				action: "sh /mnt/us/extensions/spotify-remote/nowplaying-launch.sh",
+				action: "sh /mnt/us/extensions/spotify-remote/launch.sh",
 			},
 			"Create Login URL": {
-				action: "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
-				params: "kual login",
+				action: "sh /mnt/us/extensions/spotify-remote/login-url.sh",
 			},
-			"Finish Login": {
-				action: "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
-				params: "kual finish-login",
+			"Finish Login From callback.txt": {
+				action: "sh /mnt/us/extensions/spotify-remote/finish-login.sh",
 			},
 		}
 		checked := map[string]bool{}
@@ -275,7 +273,7 @@ func TestKUALLoginMenuUsesDirectBinary(t *testing.T) {
 	}
 }
 
-// TestDeploySupportsKUALMenu verifies USB deploy supports the active binary menu and cleans stale menus.
+// TestDeploySupportsKUALMenu verifies USB deploy supports the wrapper menu and cleans stale menus.
 func TestDeploySupportsKUALMenu(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "scripts", "lib", "kindle.ps1"))
 	if err != nil {
@@ -283,7 +281,10 @@ func TestDeploySupportsKUALMenu(t *testing.T) {
 	}
 	script := string(raw)
 	for _, want := range []string{
-		`spotify-remote-arm`,
+		`spotify-remote-arm.new`,
+		`"login-url.sh"`,
+		`"finish-login.sh"`,
+		`"run-kual.sh"`,
 		`extensions\spotifyremote`,
 		`Remove-ObsoleteSpotifyMenuEntries`,
 		`extensions\kindlefetch\menu.json`,
@@ -297,7 +298,7 @@ func TestDeploySupportsKUALMenu(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(deployRaw), "-DeployActiveBinary") {
-		t.Fatal("deploy-kindle.ps1 does not deploy the active binary required by KUAL")
+	if !strings.Contains(string(deployRaw), "-DeployActiveBinary:$DeployActiveBinary") {
+		t.Fatal("deploy-kindle.ps1 does not preserve default .new deploy behavior")
 	}
 }

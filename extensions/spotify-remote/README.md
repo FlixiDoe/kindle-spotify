@@ -31,9 +31,9 @@ data/config.example.json Public configuration template
 
 The normal KUAL menu is intentionally small:
 
-- `Now Playing Display`: starts the Kindle now-playing display through `nowplaying-launch.sh`.
-- `Create Login URL`: calls `bin/spotify-remote-arm` with `kual login` and writes `data/login_url.txt` for manual OAuth login on another device.
-- `Finish Login`: calls `bin/spotify-remote-arm` with `kual finish-login` and exchanges a pasted redirect URL or code from `data/callback.txt`.
+- `Now Playing Display`: starts the Kindle fullscreen Spotify app.
+- `Create Login URL`: writes `data/login_url.txt` for manual OAuth login on another device.
+- `Finish Login From callback.txt`: exchanges a pasted redirect URL or code from `data/callback.txt`.
 
 Direct control and recovery scripts remain in this folder for maintenance, but are hidden from the normal KUAL menu to keep day-to-day use simple.
 
