@@ -1,6 +1,9 @@
 var refreshTimer = null;
 var refreshSeconds = 8;
 var lastState = null;
+var rateLimitTimer = null;
+var rateLimitActive = false;
+var controlButtonIDs = ["prevBtn", "playBtn", "nextBtn", "volDownBtn", "volUpBtn", "shuffleBtn", "repeatBtn"];
 
 function el(id) {
   return document.getElementById(id);
@@ -33,6 +36,11 @@ function api(path, opts) {
       if (!res.ok || body.error) {
         var err = new Error(body.error || ("HTTP " + res.status));
         err.loginRequired = !!body.login_required;
+        if (res.status === 429 || body.error === "rate_limited") {
+          err.rateLimited = true;
+          err.retryAfter = Number(body.retry_after || res.headers.get("Retry-After") || 5);
+          err.message = body.message || ("Spotify rate limit reached - retrying in " + err.retryAfter + "s");
+        }
         throw err;
       }
       return body;
@@ -41,10 +49,60 @@ function api(path, opts) {
 }
 
 function handleAPIError(err) {
+  if (err.rateLimited) {
+    startRateLimitCountdown(err.retryAfter || 5);
+    return;
+  }
   setError(err.message);
   if (err.loginRequired) {
     show("manual", true);
   }
+}
+
+function setControlsDisabled(disabled) {
+  controlButtonIDs.forEach(function(id) {
+    el(id).disabled = disabled;
+  });
+}
+
+function startRefreshTimer() {
+  if (refreshTimer) {
+    clearInterval(refreshTimer);
+  }
+  refreshTimer = setInterval(refresh, refreshSeconds * 1000);
+}
+
+function startRateLimitCountdown(seconds) {
+  var remaining = Math.max(1, Number(seconds) || 5);
+  rateLimitActive = true;
+  setControlsDisabled(true);
+  if (refreshTimer) {
+    // Browser polling is paused during Retry-After so the client does not independently retry the local server.
+    clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+  if (rateLimitTimer) {
+    clearInterval(rateLimitTimer);
+  }
+  function render() {
+    el("rateLimitBanner").textContent = "Spotify rate limit reached - retrying in " + remaining + " s";
+    show("rateLimitBanner", true);
+  }
+  render();
+  rateLimitTimer = setInterval(function() {
+    remaining -= 1;
+    if (remaining <= 0) {
+      clearInterval(rateLimitTimer);
+      rateLimitTimer = null;
+      rateLimitActive = false;
+      setControlsDisabled(false);
+      show("rateLimitBanner", false);
+      startRefreshTimer();
+      refresh();
+      return;
+    }
+    render();
+  }, 1000);
 }
 
 function fmt(ms) {
@@ -104,6 +162,9 @@ function manualLogin() {
 }
 
 function refresh() {
+  if (rateLimitActive) {
+    return;
+  }
   api("/api/status").then(function(state) {
     lastState = state;
     setError("");
@@ -144,6 +205,9 @@ function renderState(state) {
 }
 
 function control(action, extra) {
+  if (rateLimitActive) {
+    return;
+  }
   var body = extra || {};
   body.action = action;
   api("/api/control", {
@@ -177,6 +241,9 @@ function toggleRepeat() {
 }
 
 function devices() {
+  if (rateLimitActive) {
+    return;
+  }
   api("/api/devices").then(function(data) {
     var list = el("deviceList");
     list.innerHTML = "";
@@ -213,7 +280,7 @@ function boot() {
   el("devicesBtn").onclick = devices;
   el("refreshBtn").onclick = refresh;
   refresh();
-  refreshTimer = setInterval(refresh, refreshSeconds * 1000);
+  startRefreshTimer();
 }
 
 boot();
