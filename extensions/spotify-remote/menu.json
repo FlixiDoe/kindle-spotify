@@ -14,8 +14,17 @@
           "internal": "status Spotify Now Playing"
         },
         {
-          "name": "Create Login URL",
+          "name": "Login",
           "priority": 1,
+          "action": "sh",
+          "params": "/mnt/us/extensions/spotify-remote/run-kual.sh browser-login",
+          "exitmenu": false,
+          "status": false,
+          "internal": "status Spotify Login"
+        },
+        {
+          "name": "Manual Login URL",
+          "priority": 2,
           "action": "sh",
           "params": "/mnt/us/extensions/spotify-remote/run-kual.sh login",
           "exitmenu": false,
@@ -24,7 +33,7 @@
         },
         {
           "name": "Finish Login From callback.txt",
-          "priority": 2,
+          "priority": 3,
           "action": "sh",
           "params": "/mnt/us/extensions/spotify-remote/run-kual.sh finish-login",
           "exitmenu": false,

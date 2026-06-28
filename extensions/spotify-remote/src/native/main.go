@@ -936,7 +936,7 @@ func (a *app) kualStatus() {
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
 	if err != nil {
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Login.", "Manual fallback: Manual Login URL.")
 			return
 		}
 		a.kualPrint("ERROR", "Failed to get playback state:", err.Error(), "Use Login first.")
@@ -1173,7 +1173,7 @@ func (a *app) kualPlayPause() {
 			err = errors.New("No active Spotify device")
 		}
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Login.", "Manual fallback: Manual Login URL.")
 			return
 		}
 		a.kualPrint("Play/Pause failed", err.Error())
@@ -1195,7 +1195,7 @@ func (a *app) kualControl(method, endpoint string, body io.Reader, label string)
 	_, err := a.spotifyAPI(method, endpoint, body, nil)
 	if err != nil {
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Login.", "Manual fallback: Manual Login URL.")
 			return
 		}
 		a.kualPrint(label+" failed", err.Error())
@@ -1217,7 +1217,7 @@ func (a *app) kualVolume(delta int) {
 			err = errors.New("No active Spotify device")
 		}
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Login.", "Manual fallback: Manual Login URL.")
 			return
 		}
 		a.kualPrint("Volume failed", err.Error())
@@ -1240,7 +1240,7 @@ func (a *app) kualToggleShuffle() {
 			err = errors.New("No active Spotify device")
 		}
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Login.", "Manual fallback: Manual Login URL.")
 			return
 		}
 		a.kualPrint("Shuffle failed", err.Error())
@@ -1262,7 +1262,7 @@ func (a *app) kualToggleRepeat() {
 			err = errors.New("No active Spotify device")
 		}
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Create Login URL.", "Then Finish Login From callback.txt.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Run Login.", "Manual fallback: Manual Login URL.")
 			return
 		}
 		a.kualPrint("Repeat failed", err.Error())
@@ -1474,7 +1474,7 @@ func (a *app) refresh() {
 	if err != nil {
 		if errors.Is(err, errSessionExpired) {
 			a.status = "Session abgelaufen - bitte erneut einloggen"
-			a.err = "Create Login URL -> Finish Login From callback.txt"
+			a.err = "Run Login"
 		} else {
 			a.err = "Failed to get playback state: " + err.Error()
 		}
@@ -1549,7 +1549,7 @@ func (a *app) control(action string) {
 	if err != nil {
 		if errors.Is(err, errSessionExpired) {
 			a.status = "Session abgelaufen - bitte erneut einloggen"
-			a.err = "Create Login URL -> Finish Login From callback.txt"
+			a.err = "Run Login"
 			a.hasState = false
 		} else {
 			a.err = err.Error()
@@ -1579,7 +1579,7 @@ func (a *app) showDevices() {
 	if err != nil {
 		if errors.Is(err, errSessionExpired) {
 			a.status = "Session abgelaufen - bitte erneut einloggen"
-			a.err = "Create Login URL -> Finish Login From callback.txt"
+			a.err = "Run Login"
 			a.hasState = false
 		} else {
 			a.err = err.Error()
@@ -1606,7 +1606,7 @@ func (a *app) showDevices() {
 			if err != nil {
 				if errors.Is(err, errSessionExpired) {
 					a.status = "Session abgelaufen - bitte erneut einloggen"
-					a.err = "Create Login URL -> Finish Login From callback.txt"
+					a.err = "Run Login"
 					a.hasState = false
 				} else {
 					a.err = err.Error()

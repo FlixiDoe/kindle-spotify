@@ -30,7 +30,8 @@ data/config.example.json Public configuration template
 The normal KUAL menu is intentionally small:
 
 - `Now Playing Display`: starts the fullscreen Kindle Spotify remote through `launch.sh`.
-- `Create Login URL`: writes `data/login_url.txt` for manual OAuth login.
+- `Login`: opens Spotify and completes OAuth automatically through the Kindle callback server.
+- `Manual Login URL`: writes `data/login_url.txt` for manual OAuth login if automatic browser login fails.
 - `Finish Login From callback.txt`: exchanges a pasted redirect URL or code from `data/callback.txt`.
 
 Direct control and recovery scripts remain in this folder for maintenance, but are hidden from the normal KUAL menu to keep day-to-day use simple.

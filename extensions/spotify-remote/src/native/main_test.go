@@ -213,7 +213,7 @@ func TestNativePendingPlaybackCallDiscardedWhenPlaybackEnds(t *testing.T) {
 	}
 }
 
-// TestKUALLoginMenuUsesWrapper verifies manual login actions use run-kual.sh so .new deployments generate login_url.txt.
+// TestKUALLoginMenuUsesWrapper verifies login actions use run-kual.sh so .new deployments run the newest binary.
 func TestKUALLoginMenuUsesWrapper(t *testing.T) {
 	type menuItem struct {
 		Name   string     `json:"name"`
@@ -235,22 +235,29 @@ func TestKUALLoginMenuUsesWrapper(t *testing.T) {
 		if err := json.Unmarshal(raw, &root); err != nil {
 			t.Fatal(err)
 		}
-		var checked int
+		want := map[string]string{
+			"Login":                          "/mnt/us/extensions/spotify-remote/run-kual.sh browser-login",
+			"Manual Login URL":               "/mnt/us/extensions/spotify-remote/run-kual.sh login",
+			"Finish Login From callback.txt": "/mnt/us/extensions/spotify-remote/run-kual.sh finish-login",
+		}
+		checked := map[string]bool{}
 		for _, group := range root.Items {
 			for _, item := range group.Items {
-				if item.Name == "Create Login URL" || item.Name == "Finish Login From callback.txt" {
-					checked++
+				if wantParams, ok := want[item.Name]; ok {
+					checked[item.Name] = true
 					if item.Action != "sh" {
 						t.Fatalf("%s action in %s = %q, want sh", item.Name, path, item.Action)
 					}
-					if item.Params != "/mnt/us/extensions/spotify-remote/run-kual.sh login" && item.Params != "/mnt/us/extensions/spotify-remote/run-kual.sh finish-login" {
-						t.Fatalf("%s params in %s = %q, want run-kual.sh login or finish-login", item.Name, path, item.Params)
+					if item.Params != wantParams {
+						t.Fatalf("%s params in %s = %q, want %q", item.Name, path, item.Params, wantParams)
 					}
 				}
 			}
 		}
-		if checked != 2 {
-			t.Fatalf("%s checked login menu items = %d, want 2", path, checked)
+		for name := range want {
+			if !checked[name] {
+				t.Fatalf("%s missing menu item %q", path, name)
+			}
 		}
 	}
 }
