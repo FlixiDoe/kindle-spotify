@@ -68,15 +68,21 @@ function Invoke-NativeBuild {
 
 function Invoke-NativeTests {
   param(
-    [string]$RepoRoot = (Get-RepoRoot),
-    [string]$GoArm = "7"
+    [string]$RepoRoot = (Get-RepoRoot)
   )
 
   $goExe = Resolve-GoExe
-  Push-Location $RepoRoot
+  $extensionRoot = Get-SpotifyExtensionRoot -RepoRoot $RepoRoot
+  Push-Location $extensionRoot
   try {
-    Set-KindleGoEnv -GoArm $GoArm
-    & $goExe test ./extensions/spotify-remote/src/native ./extensions/spotify-remote/src
+    Remove-Item Env:\GOOS -ErrorAction SilentlyContinue
+    Remove-Item Env:\GOARCH -ErrorAction SilentlyContinue
+    Remove-Item Env:\GOARM -ErrorAction SilentlyContinue
+    Remove-Item Env:\CGO_ENABLED -ErrorAction SilentlyContinue
+    & $goExe test ./src/native
+    if ($LASTEXITCODE -ne 0) {
+      throw "Go native tests failed with exit code $LASTEXITCODE."
+    }
   } finally {
     Pop-Location
   }

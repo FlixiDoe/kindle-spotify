@@ -174,7 +174,7 @@ type uiTouchZone struct {
 
 // app holds the mutable process state for the native Kindle remote.
 type app struct {
-	base                    string        // base is the extension root containing data, logs, bin, and www directories.
+	base                    string        // base is the extension root containing data, logs, and bin directories.
 	cfg                     config        // cfg is the loaded runtime configuration, normalized during startup.
 	client                  *http.Client  // client is the shared HTTP client used for Spotify, cover downloads, and OAuth token calls.
 	status                  string        // status is the latest user-facing status line rendered to eips or FBInk.

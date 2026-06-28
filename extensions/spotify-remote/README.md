@@ -21,8 +21,6 @@ nowplaying-*.sh        Passive display helpers
 build.sh               Linux/macOS cross-build helper
 build.ps1              Windows cross-build helper
 src/native/            Native Kindle Spotify remote
-src/spotify-remote.go  Browser/server fallback
-www/                   Browser UI fallback assets
 data/config.example.json Public configuration template
 ```
 

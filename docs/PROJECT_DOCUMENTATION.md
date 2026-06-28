@@ -34,7 +34,7 @@ The native app is responsible for:
 - showing current playback context and active Spotify device names when Spotify provides them;
 - showing diagnostic tap output such as `raw=x,y xy=x,y`.
 
-The legacy browser/server implementation remains in `src/spotify-remote.go` and `www/` as a setup/development fallback. It is not the preferred daily UI.
+The obsolete non-native runtime was removed. The maintained runtime surface is now the native Kindle app in `src/native/main.go`.
 
 ## Kindle Runtime Rules
 
@@ -87,13 +87,13 @@ Reference starting points:
 
 ## Open Product TODOs
 
-- Consider a WebLaunch/browser fallback only if native touch remains unreliable on a specific model.
+- Keep the runtime native-only unless a future Kindle model proves native touch or FBInk support impossible to maintain.
 - Consider moving more drawing to FBInk if cover/dashboard rendering becomes a priority.
 
 Done:
 
 - The native FBInk now-playing view keeps the stable main layout and uses the third track-info row for Spotify playback context when Spotify provides it. It resolves `context.href` to a display name where possible, falls back to a short Spotify URI identifier, and avoids emoji-only names that FBInk would render as an empty label.
-- The native FBInk now-playing view and browser fallback show the active Spotify device name when the playback state includes `device.name`.
+- The native FBInk now-playing view shows the active Spotify device name when the playback state includes `device.name`.
 
 ## Maintenance Checklist
 
@@ -154,9 +154,7 @@ Retry handling is intentionally outside token refresh and OAuth error handling. 
 
 The native runtime protects active playback by buffering one failed Spotify call while known playback is active. A newer 429 replaces the older pending call. After the wait, the pending call is replayed only if playback is still active; otherwise it is discarded and logged. The display countdown uses row-only eips/FBInk updates so the normal playback screen is not cleared or redrawn every second.
 
-The browser fallback returns HTTP 429 with JSON `error`, `retry_after`, and `message` fields plus a `Retry-After` header. The web UI shows a countdown banner, disables playback controls during the wait, pauses polling so it does not retry the local server independently, and resumes after the countdown.
-
-Test coverage lives in `extensions/spotify-remote/src/spotify-remote_test.go` and `extensions/spotify-remote/src/native/main_test.go`. The tests cover 429 interception, default retry delay, token endpoint exclusion, retry success, second-429 non-retryable state, idle versus active playback routing, replay while active, and discard after playback ends.
+Test coverage lives in `extensions/spotify-remote/src/native/main_test.go`. The tests cover 429 interception through the native Spotify API wrapper, default retry delay, token endpoint exclusion, retry success, second-429 non-retryable state, idle versus active playback routing, replay while active, and discard after playback ends.
 
 ## AI Development Assistance
 

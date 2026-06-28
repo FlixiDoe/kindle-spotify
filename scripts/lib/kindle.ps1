@@ -72,7 +72,14 @@ function Copy-SpotifyExtensionToKindle {
     Copy-RequiredFile -Source (Join-Path $extensionRoot $file) -Destination (Join-Path $targetRoot $file)
   }
 
-  foreach ($dir in @("www", "src")) {
+  foreach ($obsoleteDir in @("www")) {
+    $obsoleteTargetDir = Join-Path $targetRoot $obsoleteDir
+    if (Test-Path $obsoleteTargetDir) {
+      Remove-Item -Recurse -Force -LiteralPath $obsoleteTargetDir
+    }
+  }
+
+  foreach ($dir in @("src")) {
     $sourceDir = Join-Path $extensionRoot $dir
     $targetDir = Join-Path $targetRoot $dir
     if (Test-Path $targetDir) {

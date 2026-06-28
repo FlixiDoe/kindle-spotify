@@ -2,7 +2,7 @@
 
 Spotify playback control for jailbroken Kindle devices via KUAL.
 
-This project provides a Kindle-friendly Spotify remote with a native e-ink touch UI, a passive now-playing display, and a fallback browser-based interface. It is designed around Kindle Paperwhite 11th generation / PW5 class devices, but the code is intentionally small enough to adapt to nearby Kindle models.
+This project provides a Kindle-friendly Spotify remote with a native e-ink touch UI and a passive now-playing display. It is designed around Kindle Paperwhite 11th generation / PW5 class devices, but the code is intentionally small enough to adapt to nearby Kindle models.
 
 This is an independent hobby project and is not affiliated with, endorsed by, sponsored by, or approved by Spotify AB or Amazon.
 
@@ -14,12 +14,11 @@ This is an independent hobby project and is not affiliated with, endorsed by, sp
 - E-ink optimized now-playing screen with album cover, title, artist, album/playback context, progress, duration, volume, shuffle, repeat, and active Spotify device
 - Touch controls in the native UI for previous, play/pause, next, volume down/up, shuffle toggle, repeat mode cycling, and lower-right quit
 - Spotify playlist/playback context display when available, including playlist names, playlist ID fallback, albums, artists, and Liked Songs context
-- Active Spotify device name display in both the native Kindle UI and browser fallback
+- Active Spotify device name display in the native Kindle UI
 - Spotify OAuth PKCE login without a client secret
 - KUAL login fallback that writes `data/login_url.txt` and completes login from `data/callback.txt`
 - Local token storage and automatic refresh-token handling
-- Spotify Web API playback control for play, pause, next, previous, volume, shuffle, repeat, and transfer/device actions in the fallback server path
-- Browser/server fallback UI kept for setup and development
+- Spotify Web API playback control for play, pause, next, previous, volume, shuffle, repeat, and device selection from the native Kindle app
 - Windows USB deploy helper that builds the ARM binary, preserves Kindle-local config/token data, and deploys as `spotify-remote-arm.new`
 - Cross-compile helpers for Linux ARM Kindle targets
 - Framework stop/start and recovery scripts for PW5/newer firmware white-screen or interrupted-app recovery
@@ -67,8 +66,6 @@ extensions/spotify-remote/
   build.sh                  Linux/macOS cross-compile helper
   build.ps1                 Windows PowerShell cross-compile helper
   src/native/main.go        Native KUAL/touch/eips Spotify remote
-  src/spotify-remote.go     Browser-server remote implementation
-  www/                      Browser UI assets
 ```
 
 The Kindle-side launcher prefers `bin/spotify-remote-arm.new` when present. This is useful for USB deployments where the currently running `spotify-remote-arm` may be locked by the Kindle.
@@ -111,7 +108,6 @@ http://127.0.0.1:8787/callback
   "redirect_uri": "http://127.0.0.1:8787/callback",
   "port": 8787,
   "refresh_seconds": 8,
-  "show_cover": true,
   "screen_width": 1236,
   "screen_height": 1648,
   "touch_min_x": 0,

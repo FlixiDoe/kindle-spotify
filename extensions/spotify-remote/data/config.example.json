@@ -3,7 +3,6 @@
   "redirect_uri": "http://127.0.0.1:8787/callback",
   "port": 8787,
   "refresh_seconds": 8,
-  "show_cover": true,
   "screen_width": 1236,
   "screen_height": 1648,
   "touch_min_x": 0,
