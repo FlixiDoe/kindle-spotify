@@ -16,8 +16,8 @@
         {
           "name": "Create Login URL",
           "priority": 1,
-          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
-          "params": "kual login",
+          "action": "sh",
+          "params": "/mnt/us/extensions/spotify-remote/run-kual.sh login",
           "exitmenu": false,
           "status": false,
           "internal": "status Create Spotify Login URL"
@@ -25,8 +25,8 @@
         {
           "name": "Finish Login From callback.txt",
           "priority": 2,
-          "action": "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
-          "params": "kual finish-login",
+          "action": "sh",
+          "params": "/mnt/us/extensions/spotify-remote/run-kual.sh finish-login",
           "exitmenu": false,
           "status": false,
           "internal": "status Finish Spotify Login"

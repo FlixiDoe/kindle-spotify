@@ -56,6 +56,7 @@ function Copy-SpotifyExtensionToKindle {
     "config.xml",
     "menu.json",
     "launch.sh",
+    "run-kual.sh",
     "run-native.sh",
     "stop.sh",
     "recover.sh",

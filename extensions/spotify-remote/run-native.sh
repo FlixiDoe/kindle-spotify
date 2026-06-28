@@ -13,6 +13,13 @@ APP_PID=""
 WAIT_STATUS=0
 CLEANED_UP=0
 
+if [ -f "$BIN_NEW" ]; then
+  chmod 755 "$BIN_NEW" >/dev/null 2>&1 || true
+fi
+if [ -f "$BIN" ]; then
+  chmod 755 "$BIN" >/dev/null 2>&1 || true
+fi
+
 if [ -x "$BIN_NEW" ]; then
   BIN="$BIN_NEW"
 fi

@@ -57,6 +57,7 @@ extensions/spotify-remote/
   config.xml                KUAL extension metadata
   menu.json                 KUAL menu definition
   launch.sh                 Starts the native touch remote through run-native.sh
+  run-kual.sh               Runs KUAL one-shot actions through the newest native binary
   run-native.sh             Stops Kindle framework, runs native binary, restores framework
   stop.sh                   Stops the native app and restores Kindle UI
   recover.sh                Emergency UI recovery helper
@@ -68,7 +69,7 @@ extensions/spotify-remote/
   src/native/main.go        Native KUAL/touch/eips Spotify remote
 ```
 
-The Kindle-side launcher prefers `bin/spotify-remote-arm.new` when present. This is useful for USB deployments where the currently running `spotify-remote-arm` may be locked by the Kindle.
+The Kindle-side launchers chmod the deployed binaries, then prefer `bin/spotify-remote-arm.new` when present. This is useful for USB deployments where the currently running `spotify-remote-arm` may be locked by the Kindle. `run-kual.sh` uses the same selection for one-shot KUAL actions such as `Create Login URL`.
 
 ## Requirements
 
@@ -212,7 +213,7 @@ The script finds the Kindle USB drive, builds the ARM binary, copies the extensi
 /mnt/us/extensions/spotify-remote/bin/spotify-remote-arm.new
 ```
 
-`run-native.sh` prefers `.new` on the next launch, which avoids overwriting a binary that may still be locked by a running Kindle process.
+`run-native.sh` and `run-kual.sh` chmod and prefer `.new` on the next launch/action, which avoids overwriting a binary that may still be locked by a running Kindle process.
 
 If auto-detection fails, pass the drive letter:
 
@@ -242,8 +243,8 @@ chmod 755 /mnt/us/extensions/spotify-remote/bin/spotify-remote-arm
 - `config.xml`: KUAL extension metadata and menu registration.
 - `Spotify Remote`: KUAL folder that keeps all Spotify actions grouped instead of spreading them across the main KUAL list.
 - `Now Playing Display`: starts the Kindle fullscreen Spotify app.
-- `Create Login URL`: writes a Spotify login URL to `data/login_url.txt`.
-- `Finish Login From callback.txt`: exchanges a pasted redirect URL or code from `data/callback.txt`.
+- `Create Login URL`: runs through `run-kual.sh` and writes a Spotify login URL to `data/login_url.txt`.
+- `Finish Login From callback.txt`: runs through `run-kual.sh` and exchanges a pasted redirect URL or code from `data/callback.txt`.
 
 Advanced recovery and direct-control scripts are still shipped in the extension folder, but they are intentionally hidden from the normal KUAL menu so day-to-day use stays small.
 

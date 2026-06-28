@@ -1,11 +1,13 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -91,7 +93,13 @@ func TestLoadTokenInvalidGrantClearsToken(t *testing.T) {
 // TestNative429DuringIdleSchedulesRetryPath verifies idle 429s use the scheduler path rather than the playback buffer.
 func TestNative429DuringIdleSchedulesRetryPath(t *testing.T) {
 	resetRateLimitStateForTest()
+	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if hits > 1 {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(http.StatusTooManyRequests)
 	}))
@@ -111,6 +119,10 @@ func TestNative429DuringIdleSchedulesRetryPath(t *testing.T) {
 	}
 	if !active {
 		t.Fatal("rateLimitActive = false, want true")
+	}
+	time.Sleep(1300 * time.Millisecond)
+	if hits != 2 {
+		t.Fatalf("hits = %d, want scheduled retry hit count 2", hits)
 	}
 }
 
@@ -198,5 +210,58 @@ func TestNativePendingPlaybackCallDiscardedWhenPlaybackEnds(t *testing.T) {
 	time.Sleep(1300 * time.Millisecond)
 	if hits != 1 {
 		t.Fatalf("hits = %d, want no replay after playback ended", hits)
+	}
+}
+
+// TestKUALLoginMenuUsesWrapper verifies manual login actions use run-kual.sh so .new deployments generate login_url.txt.
+func TestKUALLoginMenuUsesWrapper(t *testing.T) {
+	type menuItem struct {
+		Name   string     `json:"name"`
+		Action string     `json:"action"`
+		Params string     `json:"params"`
+		Items  []menuItem `json:"items"`
+	}
+	for _, path := range []string{
+		filepath.Join("..", "..", "menu.json"),
+		filepath.Join("..", "..", "..", "spotifyremote", "menu.json"),
+	} {
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var root struct {
+			Items []menuItem `json:"items"`
+		}
+		if err := json.Unmarshal(raw, &root); err != nil {
+			t.Fatal(err)
+		}
+		var checked int
+		for _, group := range root.Items {
+			for _, item := range group.Items {
+				if item.Name == "Create Login URL" || item.Name == "Finish Login From callback.txt" {
+					checked++
+					if item.Action != "sh" {
+						t.Fatalf("%s action in %s = %q, want sh", item.Name, path, item.Action)
+					}
+					if item.Params != "/mnt/us/extensions/spotify-remote/run-kual.sh login" && item.Params != "/mnt/us/extensions/spotify-remote/run-kual.sh finish-login" {
+						t.Fatalf("%s params in %s = %q, want run-kual.sh login or finish-login", item.Name, path, item.Params)
+					}
+				}
+			}
+		}
+		if checked != 2 {
+			t.Fatalf("%s checked login menu items = %d, want 2", path, checked)
+		}
+	}
+}
+
+// TestDeployCopiesKUALWrapper verifies USB deploy ships run-kual.sh with the KUAL extension files.
+func TestDeployCopiesKUALWrapper(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "scripts", "lib", "kindle.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"run-kual.sh"`) {
+		t.Fatal("deploy script does not copy run-kual.sh")
 	}
 }

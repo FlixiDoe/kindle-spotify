@@ -23,6 +23,8 @@ KUAL -> extensions/spotify-remote/menu.json
      -> src/native/main.go
 ```
 
+One-shot KUAL actions such as `Create Login URL` and `Finish Login From callback.txt` go through `sh` with `run-kual.sh` in the params field. The wrapper chmods copied binaries and prefers `bin/spotify-remote-arm.new` when it exists. This keeps manual login actions on the same freshly deployed binary as the fullscreen native UI.
+
 The native app is responsible for:
 
 - drawing the Kindle UI with FBInk/eips-style primitives;
@@ -122,7 +124,7 @@ Use an explicit drive letter if Windows does not expose the Kindle with the `Kin
 Deploy rules:
 
 - Build locally before copying unless `-SkipBuild` is explicitly used.
-- Copy the new binary to `bin/spotify-remote-arm.new`; `run-native.sh` prefers that file on the next launch.
+- Copy the new binary to `bin/spotify-remote-arm.new`; `run-native.sh` and `run-kual.sh` chmod and prefer that file on the next launch/action.
 - Preserve Kindle-local `data/config.json`, `data/token.json`, callback files, and logs.
 - Keep `extensions/spotify-remote/menu.json` and `extensions/spotifyremote/menu.json` synchronized on the Kindle.
 - Verify SHA256 of local binary and deployed binary.

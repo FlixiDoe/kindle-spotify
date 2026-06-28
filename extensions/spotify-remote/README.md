@@ -14,6 +14,7 @@ For full user-facing setup, build, install, login, troubleshooting, legal, priva
 config.xml             KUAL extension metadata
 menu.json              KUAL menu entries
 launch.sh              Detaches from KUAL and starts run-native.sh
+run-kual.sh            Runs one-shot KUAL actions with the newest native binary
 run-native.sh          Runs the native fullscreen app and restores framework on exit
 stop.sh                Stops the native app
 recover.sh             Emergency framework/UI recovery
@@ -86,7 +87,7 @@ From the repository root on Windows:
 .\scripts\deploy-kindle.ps1
 ```
 
-The deploy script copies the built binary as `bin/spotify-remote-arm.new` and leaves local Kindle runtime data untouched. `run-native.sh` automatically prefers `.new` on the next KUAL launch.
+The deploy script copies the built binary as `bin/spotify-remote-arm.new` and leaves local Kindle runtime data untouched. `run-native.sh` and `run-kual.sh` chmod and automatically prefer `.new` on the next KUAL launch/action.
 
 Other Windows helper scripts live in `scripts/`:
 

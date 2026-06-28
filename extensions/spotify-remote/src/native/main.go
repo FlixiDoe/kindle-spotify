@@ -908,7 +908,7 @@ func (a *app) kualNowPlayingData() {
 }
 
 // kualPrint writes user-facing KUAL status output.
-// It prefixes lines with SPOTIFY REMOTE, logs each line, and writes data/status.txt for shell/menu scripts to display.
+// It prefixes lines with SPOTIFY REMOTE, logs each line, ensures data/ exists, and writes data/status.txt for shell/menu scripts to display.
 // Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
 // Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
 // Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
@@ -921,6 +921,8 @@ func (a *app) kualPrint(lines ...string) {
 		log.Printf("KUAL: %s", line)
 	}
 	statusPath := filepath.Join(a.base, "data", "status.txt")
+	// KUAL status output must create data/ itself so setup failures can still tell the user what went wrong.
+	_ = os.MkdirAll(filepath.Dir(statusPath), 0755)
 	_ = os.WriteFile(statusPath, []byte(strings.Join(out, "\n")+"\n"), 0644)
 }
 
@@ -1897,6 +1899,8 @@ func (a *app) spotifyAPIWithRetry(method, endpoint string, body io.Reader, out a
 	}
 	b, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode == http.StatusNoContent {
+		a.restoreRateLimitStatus()
+		clearRateLimit()
 		return resp.StatusCode, nil
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
