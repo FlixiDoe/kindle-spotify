@@ -54,6 +54,7 @@ var (
 	rateLimitNonRetryable      bool
 	pendingPlaybackCall        func() error
 	pendingPlaybackCallID      int64
+	rateLimitDisplayID         int64
 )
 
 // config describes data/config.json for the native Kindle runtime.
@@ -173,19 +174,21 @@ type uiTouchZone struct {
 
 // app holds the mutable process state for the native Kindle remote.
 type app struct {
-	base       string        // base is the extension root containing data, logs, bin, and www directories.
-	cfg        config        // cfg is the loaded runtime configuration, normalized during startup.
-	client     *http.Client  // client is the shared HTTP client used for Spotify, cover downloads, and OAuth token calls.
-	status     string        // status is the latest user-facing status line rendered to eips or FBInk.
-	err        string        // err is the latest user-facing error line rendered to eips or written for KUAL.
-	state      playback      // state is the last successful playback snapshot from GET /v1/me/player.
-	hasState   bool          // hasState reports whether state currently contains a successful playback snapshot.
-	buttons    []uiButton    // buttons is the current eips fallback hit-test table, rebuilt on draw.
-	mu         sync.Mutex    // mu protects status, err, state, hasState, buttons, lastDraw, and lastTap.
-	lastDraw   time.Time     // lastDraw throttles eips redraws to avoid excessive Kindle framebuffer refreshes.
-	lastAction time.Time     // lastAction debounces touch events from noisy input devices.
-	lastTap    string        // lastTap stores the most recent tap diagnostic displayed in the eips UI.
-	quit       chan struct{} // quit is closed or signaled to stop loops and clear the display.
+	base                    string        // base is the extension root containing data, logs, bin, and www directories.
+	cfg                     config        // cfg is the loaded runtime configuration, normalized during startup.
+	client                  *http.Client  // client is the shared HTTP client used for Spotify, cover downloads, and OAuth token calls.
+	status                  string        // status is the latest user-facing status line rendered to eips or FBInk.
+	err                     string        // err is the latest user-facing error line rendered to eips or written for KUAL.
+	state                   playback      // state is the last successful playback snapshot from GET /v1/me/player.
+	hasState                bool          // hasState reports whether state currently contains a successful playback snapshot.
+	buttons                 []uiButton    // buttons is the current eips fallback hit-test table, rebuilt on draw.
+	mu                      sync.Mutex    // mu protects status, err, state, hasState, buttons, lastDraw, and lastTap.
+	lastDraw                time.Time     // lastDraw throttles eips redraws to avoid excessive Kindle framebuffer refreshes.
+	lastAction              time.Time     // lastAction debounces touch events from noisy input devices.
+	lastTap                 string        // lastTap stores the most recent tap diagnostic displayed in the eips UI.
+	quit                    chan struct{} // quit is closed or signaled to stop loops and clear the display.
+	rateLimitPreviousStatus string        // rateLimitPreviousStatus stores the status line restored after a rate-limit retry succeeds.
+	rateLimitStatusActive   bool          // rateLimitStatusActive reports whether the rate-limit countdown owns the status line.
 }
 
 // main initializes logging, configuration, routing mode, background loops, and the Kindle display lifecycle.
@@ -1874,12 +1877,15 @@ func (a *app) spotifyAPIWithRetry(method, endpoint string, body io.Reader, out a
 		// Spotify returned 429; read Retry-After header (default 5 s if absent) and set errRateLimited, while explicitly excluding the token endpoint.
 		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 		setRateLimit(retryAfter)
+		activePlayback := a.isActivePlayback()
+		// The Kindle display shows a countdown in the status area, or a secondary row during active playback so the main playback text remains visible.
+		a.showRateLimitCountdown(retryAfter, activePlayback)
 		retryFn := func() error {
 			_, retryErr := a.spotifyAPIWithRetry(method, endpoint, bytes.NewReader(payload), out, false)
 			return retryErr
 		}
 		if allowSchedule {
-			if a.isActivePlayback() {
+			if activePlayback {
 				// Active Spotify playback is treated as a protected countdown period; buffer the failed call instead of interrupting playback UI state.
 				a.bufferPendingPlaybackCall(retryFn, time.Duration(retryAfter)*time.Second)
 			} else {
@@ -1901,6 +1907,7 @@ func (a *app) spotifyAPIWithRetry(method, endpoint string, body io.Reader, out a
 			return resp.StatusCode, err
 		}
 	}
+	a.restoreRateLimitStatus()
 	clearRateLimit()
 	return resp.StatusCode, nil
 }
@@ -1964,6 +1971,87 @@ func (a *app) bufferPendingPlaybackCall(fn func() error, retryAfter time.Duratio
 		}
 		clearRateLimit()
 	}()
+}
+
+// showRateLimitCountdown displays and updates the native rate-limit wait message.
+// It snapshots the previous status when idle, starts a countdown goroutine, and updates only the eips status row or FBInk secondary row once per second.
+// Parameters: retryAfterSeconds is the parsed Spotify wait; activePlayback selects the non-blocking secondary playback area.
+// Return values: none.
+// Error conditions: display command failures are ignored by eips/fbinkText helpers.
+// Side effects: starts one goroutine, mutates display bookkeeping, and writes partial status text to the Kindle display.
+func (a *app) showRateLimitCountdown(retryAfterSeconds int, activePlayback bool) {
+	rateLimitMu.Lock()
+	rateLimitDisplayID++
+	displayID := rateLimitDisplayID
+	rateLimitMu.Unlock()
+	a.mu.Lock()
+	if !activePlayback && !a.rateLimitStatusActive {
+		a.rateLimitPreviousStatus = a.status
+		a.rateLimitStatusActive = true
+	}
+	a.mu.Unlock()
+	go func() {
+		// This goroutine updates only the status region once per second to avoid a full E-Ink refresh during the wait.
+		for remaining := retryAfterSeconds; remaining > 0; remaining-- {
+			rateLimitMu.Lock()
+			currentID := rateLimitDisplayID
+			rateLimitMu.Unlock()
+			if displayID != currentID {
+				return
+			}
+			a.writeRateLimitStatus(remaining, activePlayback)
+			time.Sleep(time.Second)
+		}
+	}()
+}
+
+// writeRateLimitStatus writes one rate-limit countdown value to the native display.
+// It uses row-only eips updates for the fallback UI and a secondary FBInk row during active playback so the main countdown/progress area is not obscured.
+// Parameters: remaining is the seconds left; activePlayback selects status row versus secondary playback row.
+// Return values: none.
+// Error conditions: display command failures are ignored by eips/fbinkText helpers.
+// Side effects: updates the Kindle display without clearing or redrawing the full screen.
+func (a *app) writeRateLimitStatus(remaining int, activePlayback bool) {
+	msg := fmt.Sprintf("Rate limited - retrying in %ds", remaining)
+	if activePlayback {
+		// During active playback the secondary lower row is updated so main playback progress remains visible.
+		eips(8, 0, safe(msg, 55))
+		a.fbinkText(2, 47, safe(msg, 35))
+		return
+	}
+	a.mu.Lock()
+	a.status = msg
+	a.mu.Unlock()
+	// The eips status row is updated directly to avoid drawLocked's full-screen clear and refresh.
+	eips(3, 0, safe("Status: "+msg, 55))
+}
+
+// restoreRateLimitStatus restores the native status area after rate-limit recovery.
+// It cancels older countdown goroutines, restores the previous idle status, and clears the secondary playback row used during active playback.
+// Parameters: none.
+// Return values: none.
+// Error conditions: display command failures are ignored by eips/fbinkText helpers.
+// Side effects: mutates display bookkeeping and writes row-only display updates.
+func (a *app) restoreRateLimitStatus() {
+	rateLimitMu.Lock()
+	rateLimitDisplayID++
+	rateLimitMu.Unlock()
+	a.mu.Lock()
+	previous := a.rateLimitPreviousStatus
+	wasActive := a.rateLimitStatusActive
+	if wasActive {
+		// The prior status line is restored after a successful retry clears the current rate-limit wait.
+		a.status = previous
+		a.rateLimitPreviousStatus = ""
+		a.rateLimitStatusActive = false
+	}
+	a.mu.Unlock()
+	if wasActive {
+		eips(3, 0, safe("Status: "+previous, 55))
+	}
+	// The secondary playback row is blanked after recovery so stale countdown text does not remain over the now-playing screen.
+	eips(8, 0, strings.Repeat(" ", 55))
+	a.fbinkText(2, 47, strings.Repeat(" ", 35))
 }
 
 // parseRetryAfter converts Spotify's Retry-After header into seconds.
