@@ -578,6 +578,16 @@ func (a *app) spotifyForm(endpoint string, form url.Values, bearer string, out a
 // Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
 // Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) spotifyAPI(method, endpoint string, body io.Reader, out any) (int, error) {
+	return a.spotifyAPIWithRetry(method, endpoint, body, out, true)
+}
+
+// spotifyAPIWithRetry sends an authorized Spotify Web API request with optional retry scheduling.
+// It implements spotifyAPI and lets scheduleRetry perform its single retry without recursively scheduling another retry on a second 429.
+// Parameters: method, endpoint, body, and out match spotifyAPI; allowSchedule controls whether a 429 starts scheduleRetry.
+// Return values: the Spotify HTTP status and an error, including errRateLimited for HTTP 429.
+// Error conditions: token load, request creation, network, JSON decoding, and mapped Spotify HTTP errors are returned to callers.
+// Side effects: can perform Spotify HTTP calls, read/write token files through loadToken, and mutate rate-limit state.
+func (a *app) spotifyAPIWithRetry(method, endpoint string, body io.Reader, out any, allowSchedule bool) (int, error) {
 	tok, err := a.loadToken()
 	if err != nil {
 		return 0, err
@@ -610,10 +620,13 @@ func (a *app) spotifyAPI(method, endpoint string, body io.Reader, out any) (int,
 		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 		setRateLimit(retryAfter)
 		retryFn := func() error {
-			_, retryErr := a.spotifyAPI(method, endpoint, bytes.NewReader(payload), out)
+			_, retryErr := a.spotifyAPIWithRetry(method, endpoint, bytes.NewReader(payload), out, false)
 			return retryErr
 		}
-		scheduleRetry(retryFn, time.Duration(retryAfter)*time.Second)
+		if allowSchedule {
+			// The first 429 outside OAuth starts one deferred retry; scheduled retries call this helper with allowSchedule=false.
+			scheduleRetry(retryFn, time.Duration(retryAfter)*time.Second)
+		}
 		return resp.StatusCode, errRateLimited
 	}
 	b, _ := io.ReadAll(resp.Body)

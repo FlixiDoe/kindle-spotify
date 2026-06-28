@@ -1831,6 +1831,16 @@ func (a *app) clearToken() error {
 // Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
 // Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) spotifyAPI(method, endpoint string, body io.Reader, out any) (int, error) {
+	return a.spotifyAPIWithRetry(method, endpoint, body, out, true)
+}
+
+// spotifyAPIWithRetry sends an authorized Spotify Web API request with optional retry scheduling.
+// It implements spotifyAPI and lets scheduleRetry perform its single retry without recursively scheduling another retry on a second 429.
+// Parameters: method, endpoint, body, and out match spotifyAPI; allowSchedule controls whether a 429 starts scheduleRetry or playback buffering.
+// Return values: the Spotify HTTP status and an error, including errRateLimited for HTTP 429.
+// Error conditions: token load, request creation, network, JSON decoding, and mapped Spotify HTTP errors are returned to callers.
+// Side effects: can perform Spotify HTTP calls, read/write token files through loadToken, mutate rate-limit state, and schedule retry goroutines.
+func (a *app) spotifyAPIWithRetry(method, endpoint string, body io.Reader, out any, allowSchedule bool) (int, error) {
 	tok, err := a.loadToken()
 	if err != nil {
 		return 0, err
@@ -1862,6 +1872,14 @@ func (a *app) spotifyAPI(method, endpoint string, body io.Reader, out any) (int,
 		// Spotify returned 429; read Retry-After header (default 5 s if absent) and set errRateLimited, while explicitly excluding the token endpoint.
 		retryAfter := parseRetryAfter(resp.Header.Get("Retry-After"))
 		setRateLimit(retryAfter)
+		retryFn := func() error {
+			_, retryErr := a.spotifyAPIWithRetry(method, endpoint, bytes.NewReader(payload), out, false)
+			return retryErr
+		}
+		if allowSchedule {
+			// The first 429 outside OAuth starts one deferred retry; scheduled retries call this helper with allowSchedule=false.
+			scheduleRetry(retryFn, time.Duration(retryAfter)*time.Second)
+		}
 		return resp.StatusCode, errRateLimited
 	}
 	b, _ := io.ReadAll(resp.Body)
@@ -1934,6 +1952,32 @@ func clearRateLimit() {
 	rateLimitRetryAfterSeconds = 0
 	rateLimitRetryAt = time.Time{}
 	rateLimitNonRetryable = false
+}
+
+// scheduleRetry retries one failed Spotify call after the provided wait.
+// It starts a goroutine, waits retryAfter, invokes fn exactly once, marks a second errRateLimited result as non-retryable, and clears rate-limit state when fn succeeds.
+// Parameters: fn is the failed Spotify operation recreated by the caller; retryAfter is the delay before the single retry.
+// Return values: none.
+// Error conditions: a second errRateLimited result sets non-retryable state, while other errors are logged and left for the original caller-visible error path.
+// Side effects: starts one goroutine, invokes fn once, logs retry failures, and mutates package-level rate-limit state.
+func scheduleRetry(fn func() error, retryAfter time.Duration) {
+	go func() {
+		// This goroutine performs exactly one deferred retry after Spotify's Retry-After delay.
+		time.Sleep(retryAfter)
+		err := fn()
+		if errors.Is(err, errRateLimited) {
+			rateLimitMu.Lock()
+			// A second 429 is terminal for this scheduled retry; no further retry is started from this scheduler.
+			rateLimitNonRetryable = true
+			rateLimitMu.Unlock()
+			return
+		}
+		if err != nil {
+			log.Printf("scheduled Spotify retry failed: %v", err)
+			return
+		}
+		clearRateLimit()
+	}()
 }
 
 // spotifyForm posts a form-encoded request to Spotify Accounts.
