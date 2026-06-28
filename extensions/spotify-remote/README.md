@@ -14,9 +14,9 @@ For full user-facing setup, build, install, login, troubleshooting, legal, priva
 config.xml             KUAL extension metadata
 menu.json              KUAL menu entries
 launch.sh              Detaches from KUAL and starts run-native.sh
-run-kual.sh            Runs one-shot KUAL actions with the newest native binary
-login-url.sh           Creates data/login_url.txt from KUAL
-finish-login.sh        Exchanges data/callback.txt from KUAL
+run-kual.sh            Maintenance wrapper for one-shot KUAL actions
+login-url.sh           Maintenance script for creating data/login_url.txt
+finish-login.sh        Maintenance script for exchanging data/callback.txt
 run-native.sh          Runs the native fullscreen app and restores framework on exit
 stop.sh                Stops the native app
 recover.sh             Emergency framework/UI recovery
@@ -31,9 +31,9 @@ data/config.example.json Public configuration template
 
 The normal KUAL menu is intentionally small:
 
-- `Now Playing Display`: starts the fullscreen Kindle Spotify remote through `launch.sh`.
-- `Create Login URL`: writes `data/login_url.txt` for manual OAuth login on another device.
-- `Finish Login`: exchanges a pasted redirect URL or code from `data/callback.txt`.
+- `Now Playing Display`: starts the Kindle now-playing display through `nowplaying-launch.sh`.
+- `Create Login URL`: calls `bin/spotify-remote-arm` with `kual login` and writes `data/login_url.txt` for manual OAuth login on another device.
+- `Finish Login`: calls `bin/spotify-remote-arm` with `kual finish-login` and exchanges a pasted redirect URL or code from `data/callback.txt`.
 
 Direct control and recovery scripts remain in this folder for maintenance, but are hidden from the normal KUAL menu to keep day-to-day use simple.
 
@@ -89,7 +89,7 @@ From the repository root on Windows:
 .\scripts\deploy-kindle.ps1
 ```
 
-The deploy script copies the built binary as `bin/spotify-remote-arm.new` and leaves local Kindle runtime data untouched. `run-native.sh` and `run-kual.sh` chmod and automatically prefer `.new` on the next KUAL launch/action.
+The deploy script copies the built binary as active `bin/spotify-remote-arm` and leaves local Kindle runtime data untouched. The KUAL login menu uses that active binary directly because it is the working form on the target Kindle.
 
 Other Windows helper scripts live in `scripts/`:
 

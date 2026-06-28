@@ -17,13 +17,12 @@ The primary runtime path is the native Kindle app:
 
 ```text
 KUAL -> extensions/spotify-remote/menu.json
-     -> launch.sh
-     -> run-native.sh
-     -> bin/spotify-remote-arm or bin/spotify-remote-arm.new
+     -> nowplaying-launch.sh for the display action
+     -> bin/spotify-remote-arm with KUAL params for login actions
      -> src/native/main.go
 ```
 
-One-shot KUAL login actions use parameterless scripts: `login-url.sh` creates `data/login_url.txt`, and `finish-login.sh` exchanges `data/callback.txt`. Those scripts call `run-kual.sh`, whose wrapper chmods copied binaries and prefers `bin/spotify-remote-arm.new` when it exists. This avoids relying on KUAL parameter passing and avoids the obsolete Kindle browser for OAuth.
+One-shot KUAL login actions use direct binary menu entries because this is the working form on the target Kindle: `Create Login URL` calls `bin/spotify-remote-arm` with `kual login`, and `Finish Login` calls the same binary with `kual finish-login`. Deploy must write the active `bin/spotify-remote-arm`; otherwise those KUAL buttons appear but do nothing.
 
 The native app is responsible for:
 
@@ -125,13 +124,13 @@ Use an explicit drive letter if Windows does not expose the Kindle with the `Kin
 Deploy rules:
 
 - Build locally before copying unless `-SkipBuild` is explicitly used.
-- Copy the new binary to `bin/spotify-remote-arm.new`; `run-native.sh` and `run-kual.sh` chmod and prefer that file on the next launch/action.
+- Copy the new binary to active `bin/spotify-remote-arm` so the direct KUAL login buttons can execute it.
 - Preserve Kindle-local `data/config.json`, `data/token.json`, callback files, and logs.
 - Remove obsolete `extensions/spotifyremote` folders and stale `Spotify Remote` groups from other KUAL menus during deploy so KUAL does not show duplicate Spotify buttons.
 - Verify SHA256 of local binary and deployed binary.
 - Eject the Kindle before launching KUAL.
 
-Use `-DeployActiveBinary` only for a clean offline copy where the app is certainly not running; normal development deploys should keep using `.new`.
+Deploy only while the app is not running so the active binary can be overwritten cleanly.
 
 Script library:
 

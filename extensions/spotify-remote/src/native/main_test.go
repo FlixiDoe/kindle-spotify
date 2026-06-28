@@ -213,8 +213,8 @@ func TestNativePendingPlaybackCallDiscardedWhenPlaybackEnds(t *testing.T) {
 	}
 }
 
-// TestKUALLoginMenuUsesWrapper verifies login actions use run-kual.sh so .new deployments run the newest binary.
-func TestKUALLoginMenuUsesWrapper(t *testing.T) {
+// TestKUALLoginMenuUsesDirectBinary verifies login actions keep the KUAL form that works on this Kindle.
+func TestKUALLoginMenuUsesDirectBinary(t *testing.T) {
 	type menuItem struct {
 		Name   string     `json:"name"`
 		Action string     `json:"action"`
@@ -234,20 +234,32 @@ func TestKUALLoginMenuUsesWrapper(t *testing.T) {
 		if err := json.Unmarshal(raw, &root); err != nil {
 			t.Fatal(err)
 		}
-		want := map[string]string{
-			"Create Login URL": "sh /mnt/us/extensions/spotify-remote/login-url.sh",
-			"Finish Login":     "sh /mnt/us/extensions/spotify-remote/finish-login.sh",
+		want := map[string]struct {
+			action string
+			params string
+		}{
+			"Now Playing Display": {
+				action: "sh /mnt/us/extensions/spotify-remote/nowplaying-launch.sh",
+			},
+			"Create Login URL": {
+				action: "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+				params: "kual login",
+			},
+			"Finish Login": {
+				action: "/mnt/us/extensions/spotify-remote/bin/spotify-remote-arm",
+				params: "kual finish-login",
+			},
 		}
 		checked := map[string]bool{}
 		for _, group := range root.Items {
 			for _, item := range group.Items {
-				if wantAction, ok := want[item.Name]; ok {
+				if wantItem, ok := want[item.Name]; ok {
 					checked[item.Name] = true
-					if item.Action != wantAction {
-						t.Fatalf("%s action in %s = %q, want %q", item.Name, path, item.Action, wantAction)
+					if item.Action != wantItem.action {
+						t.Fatalf("%s action in %s = %q, want %q", item.Name, path, item.Action, wantItem.action)
 					}
-					if item.Params != "" {
-						t.Fatalf("%s params in %s = %q, want empty params", item.Name, path, item.Params)
+					if item.Params != wantItem.params {
+						t.Fatalf("%s params in %s = %q, want %q", item.Name, path, item.Params, wantItem.params)
 					}
 				}
 			}
@@ -263,17 +275,15 @@ func TestKUALLoginMenuUsesWrapper(t *testing.T) {
 	}
 }
 
-// TestDeployCopiesKUALWrapper verifies USB deploy ships run-kual.sh with the KUAL extension files.
-func TestDeployCopiesKUALWrapper(t *testing.T) {
+// TestDeploySupportsKUALMenu verifies USB deploy supports the active binary menu and cleans stale menus.
+func TestDeploySupportsKUALMenu(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "scripts", "lib", "kindle.ps1"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	script := string(raw)
-	if !strings.Contains(script, `"run-kual.sh"`) {
-		t.Fatal("deploy script does not copy run-kual.sh")
-	}
 	for _, want := range []string{
+		`spotify-remote-arm`,
 		`extensions\spotifyremote`,
 		`Remove-ObsoleteSpotifyMenuEntries`,
 		`extensions\kindlefetch\menu.json`,
@@ -281,5 +291,13 @@ func TestDeployCopiesKUALWrapper(t *testing.T) {
 		if !strings.Contains(script, want) {
 			t.Fatalf("deploy script missing cleanup marker %q", want)
 		}
+	}
+
+	deployRaw, err := os.ReadFile(filepath.Join("..", "..", "..", "..", "scripts", "deploy-kindle.ps1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(deployRaw), "-DeployActiveBinary") {
+		t.Fatal("deploy-kindle.ps1 does not deploy the active binary required by KUAL")
 	}
 }

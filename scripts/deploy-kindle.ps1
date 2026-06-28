@@ -19,7 +19,7 @@ $kindleRoot = Find-KindleDrive -RequestedDriveLetter $DriveLetter
 $result = Copy-SpotifyExtensionToKindle `
   -KindleRoot $kindleRoot `
   -RepoRoot $repoRoot `
-  -DeployActiveBinary:$DeployActiveBinary
+  -DeployActiveBinary
 
 Write-Host "Deploy complete."
 Write-Host "Kindle binary: $($result.BinaryPath)"
