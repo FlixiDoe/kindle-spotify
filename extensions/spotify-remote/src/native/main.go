@@ -52,6 +52,8 @@ var (
 	rateLimitRetryAfterSeconds int
 	rateLimitRetryAt           time.Time
 	rateLimitNonRetryable      bool
+	pendingPlaybackCall        func() error
+	pendingPlaybackCallID      int64
 )
 
 // config describes data/config.json for the native Kindle runtime.
@@ -1877,8 +1879,13 @@ func (a *app) spotifyAPIWithRetry(method, endpoint string, body io.Reader, out a
 			return retryErr
 		}
 		if allowSchedule {
-			// The first 429 outside OAuth starts one deferred retry; scheduled retries call this helper with allowSchedule=false.
-			scheduleRetry(retryFn, time.Duration(retryAfter)*time.Second)
+			if a.isActivePlayback() {
+				// Active Spotify playback is treated as a protected countdown period; buffer the failed call instead of interrupting playback UI state.
+				a.bufferPendingPlaybackCall(retryFn, time.Duration(retryAfter)*time.Second)
+			} else {
+				// The first idle 429 outside OAuth starts one deferred retry; scheduled retries call this helper with allowSchedule=false.
+				scheduleRetry(retryFn, time.Duration(retryAfter)*time.Second)
+			}
 		}
 		return resp.StatusCode, errRateLimited
 	}
@@ -1896,6 +1903,67 @@ func (a *app) spotifyAPIWithRetry(method, endpoint string, body io.Reader, out a
 	}
 	clearRateLimit()
 	return resp.StatusCode, nil
+}
+
+// isActivePlayback reports whether the native UI currently has active Spotify playback.
+// It snapshots app state under lock and treats hasState && state.IsPlaying as the active period that must not be interrupted by 429 retry handling.
+// Parameters: none.
+// Return values: true when a known playback state is actively playing, otherwise false.
+// Error conditions: none.
+// Side effects: reads app state protected by app.mu.
+func (a *app) isActivePlayback() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.hasState && a.state.IsPlaying
+}
+
+// bufferPendingPlaybackCall stores one failed Spotify call for replay during active playback.
+// It replaces any older pending call, waits retryAfter in a goroutine, replays only if playback is still active, and logs a discard when playback has ended.
+// Parameters: fn recreates the failed Spotify call; retryAfter is the Spotify Retry-After wait.
+// Return values: none.
+// Error conditions: replay errors are logged; a second errRateLimited marks the scheduled retry as non-retryable.
+// Side effects: mutates pending playback state, starts one goroutine, may invoke Spotify once, and may clear rate-limit state.
+func (a *app) bufferPendingPlaybackCall(fn func() error, retryAfter time.Duration) {
+	rateLimitMu.Lock()
+	pendingPlaybackCallID++
+	callID := pendingPlaybackCallID
+	// Only one playback call is buffered; newer 429s replace the previous pending function before its wait expires.
+	pendingPlaybackCall = fn
+	rateLimitMu.Unlock()
+	go func() {
+		// This goroutine waits out Retry-After before deciding whether the protected playback period is still active.
+		time.Sleep(retryAfter)
+		rateLimitMu.Lock()
+		pending := pendingPlaybackCall
+		currentID := pendingPlaybackCallID
+		if callID != currentID {
+			rateLimitMu.Unlock()
+			log.Printf("discarded pending playback retry: replaced by newer rate-limited call")
+			return
+		}
+		pendingPlaybackCall = nil
+		rateLimitMu.Unlock()
+		if !a.isActivePlayback() {
+			log.Printf("discarded pending playback retry: playback ended before Retry-After elapsed")
+			return
+		}
+		if pending == nil {
+			return
+		}
+		err := pending()
+		if errors.Is(err, errRateLimited) {
+			rateLimitMu.Lock()
+			// A second 429 from a replayed playback call is non-retryable; no further playback retry is buffered.
+			rateLimitNonRetryable = true
+			rateLimitMu.Unlock()
+			return
+		}
+		if err != nil {
+			log.Printf("pending playback retry failed: %v", err)
+			return
+		}
+		clearRateLimit()
+	}()
 }
 
 // parseRetryAfter converts Spotify's Retry-After header into seconds.
