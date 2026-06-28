@@ -23,7 +23,7 @@ KUAL -> extensions/spotify-remote/menu.json
      -> src/native/main.go
 ```
 
-One-shot KUAL actions such as `Login`, `Manual Login URL`, and `Finish Login From callback.txt` go through `sh` with `run-kual.sh` in the params field. The normal `Login` action runs the automatic browser/callback PKCE flow. The manual URL/callback-file actions remain as fallback. The wrapper chmods copied binaries and prefers `bin/spotify-remote-arm.new` when it exists, keeping login actions on the same freshly deployed binary as the fullscreen native UI.
+One-shot KUAL login actions use parameterless scripts: `login-url.sh` creates `data/login_url.txt`, and `finish-login.sh` exchanges `data/callback.txt`. Those scripts call `run-kual.sh`, whose wrapper chmods copied binaries and prefers `bin/spotify-remote-arm.new` when it exists. This avoids relying on KUAL parameter passing and avoids the obsolete Kindle browser for OAuth.
 
 The native app is responsible for:
 

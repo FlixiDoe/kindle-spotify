@@ -15,6 +15,8 @@ config.xml             KUAL extension metadata
 menu.json              KUAL menu entries
 launch.sh              Detaches from KUAL and starts run-native.sh
 run-kual.sh            Runs one-shot KUAL actions with the newest native binary
+login-url.sh           Creates data/login_url.txt from KUAL
+finish-login.sh        Exchanges data/callback.txt from KUAL
 run-native.sh          Runs the native fullscreen app and restores framework on exit
 stop.sh                Stops the native app
 recover.sh             Emergency framework/UI recovery
@@ -30,8 +32,7 @@ data/config.example.json Public configuration template
 The normal KUAL menu is intentionally small:
 
 - `Now Playing Display`: starts the fullscreen Kindle Spotify remote through `launch.sh`.
-- `Login`: opens Spotify and completes OAuth automatically through the Kindle callback server.
-- `Manual Login URL`: writes `data/login_url.txt` for manual OAuth login if automatic browser login fails.
+- `Create Login URL`: writes `data/login_url.txt` for manual OAuth login on another device.
 - `Finish Login From callback.txt`: exchanges a pasted redirect URL or code from `data/callback.txt`.
 
 Direct control and recovery scripts remain in this folder for maintenance, but are hidden from the normal KUAL menu to keep day-to-day use simple.

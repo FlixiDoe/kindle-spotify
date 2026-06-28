@@ -16,7 +16,7 @@ This is an independent hobby project and is not affiliated with, endorsed by, sp
 - Spotify playlist/playback context display when available, including playlist names, playlist ID fallback, albums, artists, and Liked Songs context
 - Active Spotify device name display in the native Kindle UI
 - Spotify OAuth PKCE login without a client secret
-- KUAL login opens Spotify and completes OAuth automatically through the Kindle callback server; manual `data/login_url.txt` / `data/callback.txt` login remains as a fallback
+- KUAL login writes `data/login_url.txt` for authorization on a modern browser, then completes from `data/callback.txt`
 - Local token storage and automatic refresh-token handling
 - Spotify Web API playback control for play, pause, next, previous, volume, shuffle, repeat, and device selection from the native Kindle app
 - Windows USB deploy helper that builds the ARM binary, preserves Kindle-local config/token data, and deploys as `spotify-remote-arm.new`
@@ -58,6 +58,8 @@ extensions/spotify-remote/
   menu.json                 KUAL menu definition
   launch.sh                 Starts the native touch remote through run-native.sh
   run-kual.sh               Runs KUAL one-shot actions through the newest native binary
+  login-url.sh              KUAL-safe script for creating data/login_url.txt
+  finish-login.sh           KUAL-safe script for exchanging data/callback.txt
   run-native.sh             Stops Kindle framework, runs native binary, restores framework
   stop.sh                   Stops the native app and restores Kindle UI
   recover.sh                Emergency UI recovery helper
@@ -69,7 +71,7 @@ extensions/spotify-remote/
   src/native/main.go        Native KUAL/touch/eips Spotify remote
 ```
 
-The Kindle-side launchers chmod the deployed binaries, then prefer `bin/spotify-remote-arm.new` when present. This is useful for USB deployments where the currently running `spotify-remote-arm` may be locked by the Kindle. `run-kual.sh` uses the same selection for one-shot KUAL actions such as `Login`.
+The Kindle-side launchers chmod the deployed binaries, then prefer `bin/spotify-remote-arm.new` when present. This is useful for USB deployments where the currently running `spotify-remote-arm` may be locked by the Kindle. `login-url.sh` and `finish-login.sh` call `run-kual.sh`, which uses the same newest-binary selection for one-shot KUAL login actions.
 
 ## Requirements
 
@@ -243,33 +245,26 @@ chmod 755 /mnt/us/extensions/spotify-remote/bin/spotify-remote-arm
 - `config.xml`: KUAL extension metadata and menu registration.
 - `Spotify Remote`: KUAL folder that keeps all Spotify actions grouped instead of spreading them across the main KUAL list.
 - `Now Playing Display`: starts the Kindle fullscreen Spotify app.
-- `Login`: runs through `run-kual.sh`, opens Spotify in the Kindle browser, waits for the local callback, and writes `data/token.json` automatically.
-- `Manual Login URL`: fallback path that writes a Spotify login URL to `data/login_url.txt`.
-- `Finish Login From callback.txt`: fallback path that exchanges a pasted redirect URL or code from `data/callback.txt`.
+- `Create Login URL`: writes a Spotify login URL to `data/login_url.txt`.
+- `Finish Login From callback.txt`: exchanges a pasted redirect URL or code from `data/callback.txt`.
 
 Advanced recovery and direct-control scripts are still shipped in the extension folder, but they are intentionally hidden from the normal KUAL menu so day-to-day use stays small.
 
 ## Login Flow
 
-Preferred flow:
+Login flow:
 
 1. Start `Now Playing Display`.
-2. Use `Login`.
-3. Complete Spotify authorization.
-4. Return to the remote and refresh playback. The token is written automatically when Spotify redirects back to the Kindle callback server.
+2. Run `Create Login URL` in KUAL.
+3. Open `data/login_url.txt` on another device with a modern browser.
+4. Complete Spotify authorization.
+5. Paste the final redirect URL or only the `code` value into `data/callback.txt`.
+6. Run `Finish Login From callback.txt` in KUAL.
 
 Volume can be adjusted with the centered `VOL-  xx%  VOL+` touch areas between the status row and playback controls.
 Shuffle and repeat can be toggled by tapping the `SHUF` and `REP` status labels. Repeat cycles through Spotify's `off`, `context`, and `track` modes.
 The third track-info row normally shows the album. When Spotify provides playback context, that row shows the active context instead, for example `Playlist: <name>`, `Playlist: <id>`, or `Liked Songs`.
 The lower information area also shows the active Spotify device name, so it is visible whether playback is running on a phone, desktop, speaker, or browser session.
-
-Manual fallback:
-
-1. Run `Manual Login URL` in KUAL.
-2. Open `data/login_url.txt` on another device.
-3. Complete Spotify authorization.
-4. Paste the final redirect URL or only the `code` value into `data/callback.txt`.
-5. Run `Finish Login From callback.txt` in KUAL.
 
 ## Troubleshooting
 

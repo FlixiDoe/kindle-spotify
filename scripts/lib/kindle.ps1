@@ -55,6 +55,8 @@ function Copy-SpotifyExtensionToKindle {
   $topLevelFiles = @(
     "config.xml",
     "menu.json",
+    "login-url.sh",
+    "finish-login.sh",
     "launch.sh",
     "run-kual.sh",
     "run-native.sh",

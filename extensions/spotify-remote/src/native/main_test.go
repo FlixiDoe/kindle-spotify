@@ -236,20 +236,19 @@ func TestKUALLoginMenuUsesWrapper(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := map[string]string{
-			"Login":                          "/mnt/us/extensions/spotify-remote/run-kual.sh browser-login",
-			"Manual Login URL":               "/mnt/us/extensions/spotify-remote/run-kual.sh login",
-			"Finish Login From callback.txt": "/mnt/us/extensions/spotify-remote/run-kual.sh finish-login",
+			"Create Login URL":               "sh /mnt/us/extensions/spotify-remote/login-url.sh",
+			"Finish Login From callback.txt": "sh /mnt/us/extensions/spotify-remote/finish-login.sh",
 		}
 		checked := map[string]bool{}
 		for _, group := range root.Items {
 			for _, item := range group.Items {
-				if wantParams, ok := want[item.Name]; ok {
+				if wantAction, ok := want[item.Name]; ok {
 					checked[item.Name] = true
-					if item.Action != "sh" {
-						t.Fatalf("%s action in %s = %q, want sh", item.Name, path, item.Action)
+					if item.Action != wantAction {
+						t.Fatalf("%s action in %s = %q, want %q", item.Name, path, item.Action, wantAction)
 					}
-					if item.Params != wantParams {
-						t.Fatalf("%s params in %s = %q, want %q", item.Name, path, item.Params, wantParams)
+					if item.Params != "" {
+						t.Fatalf("%s params in %s = %q, want empty params", item.Name, path, item.Params)
 					}
 				}
 			}
