@@ -144,3 +144,25 @@ Project convention:
 - Commit each completed change separately.
 - Include the AI agent in the commit body, for example `Agent: codex`.
 - Do not commit local `data/config.json`, `data/token.json`, logs, ZIPs, or built binaries.
+
+## Rate Limiting
+
+Spotify Web API calls in both runtimes pass through the central `spotifyAPI` wrapper, which detects HTTP 429 responses outside the Spotify Accounts token endpoint. The wrapper reads Spotify's `Retry-After` header, defaults to five seconds when the header is missing or invalid, stores package-level rate-limit state, and returns the typed `errRateLimited` sentinel so callers can distinguish rate limiting from other Spotify errors.
+
+Retry handling is intentionally outside token refresh and OAuth error handling. Idle requests schedule one automatic retry after the `Retry-After` delay. The scheduled retry runs once; if Spotify returns 429 again, the state is marked non-retryable and no further retry is started by that scheduler.
+
+The native runtime protects active playback by buffering one failed Spotify call while known playback is active. A newer 429 replaces the older pending call. After the wait, the pending call is replayed only if playback is still active; otherwise it is discarded and logged. The display countdown uses row-only eips/FBInk updates so the normal playback screen is not cleared or redrawn every second.
+
+The browser fallback returns HTTP 429 with JSON `error`, `retry_after`, and `message` fields plus a `Retry-After` header. The web UI shows a countdown banner, disables playback controls during the wait, pauses polling so it does not retry the local server independently, and resumes after the countdown.
+
+Test coverage lives in `extensions/spotify-remote/src/spotify-remote_test.go` and `extensions/spotify-remote/src/native/main_test.go`. The tests cover 429 interception, default retry delay, token endpoint exclusion, retry success, second-429 non-retryable state, idle versus active playback routing, replay while active, and discard after playback ends.
+
+## AI Development Assistance
+
+This project was developed with the following AI tools:
+
+- **Gemini 3.1 Pro** (web): used for research on Kindle/KUAL development details, Spotify API behaviour, and ARM Linux platform specifics.
+- **ChatGPT Codex (GPT-5.5 medium)**: used as the primary coding agent for implementation passes, guided by prompts written for each task.
+- **Claude Sonnet 4.6**: used to write and refine the coding agent prompts that drove each implementation task.
+
+Development workflow: each task was prompted individually, implemented by the coding agent, then committed and pushed before the next task began. Commits were made after every small completed change.
