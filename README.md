@@ -238,15 +238,15 @@ chmod 755 /mnt/us/extensions/spotify-remote/bin/spotify-remote-arm
 
 4. Eject the Kindle.
 5. Open KUAL.
-6. Start `Spotify Remote -> Start Spotify Remote`.
+6. Start `Spotify Remote -> Now Playing Display`.
 
 ## KUAL Menu
 
 - `config.xml`: KUAL extension metadata and menu registration.
 - `Spotify Remote`: KUAL folder that keeps all Spotify actions grouped instead of spreading them across the main KUAL list.
-- `Start Spotify Remote`: starts the Kindle fullscreen Spotify app.
-- `Login URL erzeugen`: writes a Spotify login URL to `data/login_url.txt`.
-- `Login abschliessen`: exchanges a pasted redirect URL or code from `data/callback.txt`.
+- `Now Playing Display`: starts the Kindle fullscreen Spotify app.
+- `Create Login URL`: writes a Spotify login URL to `data/login_url.txt`.
+- `Finish Login`: exchanges a pasted redirect URL or code from `data/callback.txt`.
 
 Advanced recovery and direct-control scripts are still shipped in the extension folder, but they are intentionally hidden from the normal KUAL menu so day-to-day use stays small.
 
@@ -254,12 +254,12 @@ Advanced recovery and direct-control scripts are still shipped in the extension 
 
 Login flow:
 
-1. Start `Start Spotify Remote`.
-2. Run `Login URL erzeugen` in KUAL.
+1. Start `Now Playing Display`.
+2. Run `Create Login URL` in KUAL.
 3. Open `data/login_url.txt` on another device with a modern browser.
 4. Complete Spotify authorization.
 5. Paste the final redirect URL or only the `code` value into `data/callback.txt`.
-6. Run `Login abschliessen` in KUAL.
+6. Run `Finish Login` in KUAL.
 
 Volume can be adjusted with the centered `VOL-  xx%  VOL+` touch areas between the status row and playback controls.
 Shuffle and repeat can be toggled by tapping the `SHUF` and `REP` status labels. Repeat cycles through Spotify's `off`, `context`, and `track` modes.
@@ -286,7 +286,7 @@ Check Kindle Wi-Fi, DNS filtering, router firewall rules, captive portals, and a
 
 Native UI does not respond to touch
 
-Make sure you started `Start Spotify Remote`. The native UI prints the latest touch result as `Tap ... raw=x,y xy=x,y` or `Miss ... raw=x,y xy=x,y`. By default the app reads the touchscreen's kernel ABS min/max values from `/dev/input/event*`; this avoids assuming every Kindle uses `0..4095` raw touch coordinates. If normalized `xy` is still wrong, set `"touch_use_kernel_abs": false` and adjust `touch_min_*`, `touch_max_*`, `touch_swap_xy`, or `touch_invert_*` in `data/config.json`. If the UI rows are visually too high or too low, adjust `eips_row_height`, `button_top`, `button_height`, and `button_gap`.
+Make sure you started `Now Playing Display`. The native UI prints the latest touch result as `Tap ... raw=x,y xy=x,y` or `Miss ... raw=x,y xy=x,y`. By default the app reads the touchscreen's kernel ABS min/max values from `/dev/input/event*`; this avoids assuming every Kindle uses `0..4095` raw touch coordinates. If normalized `xy` is still wrong, set `"touch_use_kernel_abs": false` and adjust `touch_min_*`, `touch_max_*`, `touch_swap_xy`, or `touch_invert_*` in `data/config.json`. If the UI rows are visually too high or too low, adjust `eips_row_height`, `button_top`, `button_height`, and `button_gap`.
 
 Default Paperwhite 11/PW5 calibration:
 

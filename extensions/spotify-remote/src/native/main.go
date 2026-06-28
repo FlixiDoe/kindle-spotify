@@ -936,7 +936,7 @@ func (a *app) kualStatus() {
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
 	if err != nil {
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Login URL erzeugen.", "Dann Login abschliessen.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Create Login URL.", "Then run Finish Login.")
 			return
 		}
 		a.kualPrint("ERROR", "Failed to get playback state:", err.Error(), "Use Login first.")
@@ -1063,7 +1063,7 @@ func (a *app) kualLoginFile() {
 		"Open it on PC/phone.",
 		"Paste redirect URL into:",
 		"data/callback.txt",
-		"Dann Login abschliessen.",
+		"Then run Finish Login.",
 	)
 }
 
@@ -1076,7 +1076,7 @@ func (a *app) kualFinishLoginFile() {
 	path := filepath.Join(a.base, "data", "callback.txt")
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		a.kualPrint("callback.txt missing", "Login URL erzeugen.", "Then edit data/callback.txt")
+		a.kualPrint("callback.txt missing", "Create Login URL.", "Then edit data/callback.txt")
 		return
 	}
 	code, state, err := parseCallbackValue(string(raw))
@@ -1173,7 +1173,7 @@ func (a *app) kualPlayPause() {
 			err = errors.New("No active Spotify device")
 		}
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Login URL erzeugen.", "Dann Login abschliessen.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Create Login URL.", "Then run Finish Login.")
 			return
 		}
 		a.kualPrint("Play/Pause failed", err.Error())
@@ -1195,7 +1195,7 @@ func (a *app) kualControl(method, endpoint string, body io.Reader, label string)
 	_, err := a.spotifyAPI(method, endpoint, body, nil)
 	if err != nil {
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Login URL erzeugen.", "Dann Login abschliessen.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Create Login URL.", "Then run Finish Login.")
 			return
 		}
 		a.kualPrint(label+" failed", err.Error())
@@ -1217,7 +1217,7 @@ func (a *app) kualVolume(delta int) {
 			err = errors.New("No active Spotify device")
 		}
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Login URL erzeugen.", "Dann Login abschliessen.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Create Login URL.", "Then run Finish Login.")
 			return
 		}
 		a.kualPrint("Volume failed", err.Error())
@@ -1240,7 +1240,7 @@ func (a *app) kualToggleShuffle() {
 			err = errors.New("No active Spotify device")
 		}
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Login URL erzeugen.", "Dann Login abschliessen.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Create Login URL.", "Then run Finish Login.")
 			return
 		}
 		a.kualPrint("Shuffle failed", err.Error())
@@ -1262,7 +1262,7 @@ func (a *app) kualToggleRepeat() {
 			err = errors.New("No active Spotify device")
 		}
 		if errors.Is(err, errSessionExpired) {
-			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Login URL erzeugen.", "Dann Login abschliessen.")
+			a.kualPrint("Session abgelaufen", "Bitte erneut einloggen.", "Create Login URL.", "Then run Finish Login.")
 			return
 		}
 		a.kualPrint("Repeat failed", err.Error())
@@ -1474,7 +1474,7 @@ func (a *app) refresh() {
 	if err != nil {
 		if errors.Is(err, errSessionExpired) {
 			a.status = "Session abgelaufen - bitte erneut einloggen"
-			a.err = "Login URL erzeugen -> Login abschliessen"
+			a.err = "Create Login URL -> Finish Login"
 		} else {
 			a.err = "Failed to get playback state: " + err.Error()
 		}
@@ -1549,7 +1549,7 @@ func (a *app) control(action string) {
 	if err != nil {
 		if errors.Is(err, errSessionExpired) {
 			a.status = "Session abgelaufen - bitte erneut einloggen"
-			a.err = "Login URL erzeugen -> Login abschliessen"
+			a.err = "Create Login URL -> Finish Login"
 			a.hasState = false
 		} else {
 			a.err = err.Error()
@@ -1579,7 +1579,7 @@ func (a *app) showDevices() {
 	if err != nil {
 		if errors.Is(err, errSessionExpired) {
 			a.status = "Session abgelaufen - bitte erneut einloggen"
-			a.err = "Login URL erzeugen -> Login abschliessen"
+			a.err = "Create Login URL -> Finish Login"
 			a.hasState = false
 		} else {
 			a.err = err.Error()
@@ -1606,7 +1606,7 @@ func (a *app) showDevices() {
 			if err != nil {
 				if errors.Is(err, errSessionExpired) {
 					a.status = "Session abgelaufen - bitte erneut einloggen"
-					a.err = "Login URL erzeugen -> Login abschliessen"
+					a.err = "Create Login URL -> Finish Login"
 					a.hasState = false
 				} else {
 					a.err = err.Error()

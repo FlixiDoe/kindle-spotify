@@ -5,31 +5,31 @@
       "priority": 0,
       "items": [
         {
-          "name": "Start Spotify Remote",
+          "name": "Now Playing Display",
           "priority": 0,
           "action": "sh /mnt/us/extensions/spotify-remote/launch.sh",
           "params": "",
           "exitmenu": true,
           "status": false,
-          "internal": "status Start Spotify Remote"
+          "internal": "status Spotify Now Playing"
         },
         {
-          "name": "Login URL erzeugen",
+          "name": "Create Login URL",
           "priority": 1,
           "action": "sh /mnt/us/extensions/spotify-remote/login-url.sh",
           "params": "",
           "exitmenu": false,
           "status": false,
-          "internal": "status Login URL erzeugen"
+          "internal": "status Create Spotify Login URL"
         },
         {
-          "name": "Login abschliessen",
+          "name": "Finish Login",
           "priority": 2,
           "action": "sh /mnt/us/extensions/spotify-remote/finish-login.sh",
           "params": "",
           "exitmenu": false,
           "status": false,
-          "internal": "status Login abschliessen"
+          "internal": "status Finish Spotify Login"
         }
       ]
     }
