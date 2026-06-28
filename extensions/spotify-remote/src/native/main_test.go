@@ -235,8 +235,8 @@ func TestKUALLoginMenuUsesWrapper(t *testing.T) {
 			t.Fatal(err)
 		}
 		want := map[string]string{
-			"Create Login URL":               "sh /mnt/us/extensions/spotify-remote/login-url.sh",
-			"Finish Login From callback.txt": "sh /mnt/us/extensions/spotify-remote/finish-login.sh",
+			"Login URL erzeugen": "sh /mnt/us/extensions/spotify-remote/login-url.sh",
+			"Login abschliessen": "sh /mnt/us/extensions/spotify-remote/finish-login.sh",
 		}
 		checked := map[string]bool{}
 		for _, group := range root.Items {
