@@ -143,6 +143,7 @@ Project convention:
 
 - Commit each completed change separately.
 - Include the AI agent in the commit body, for example `Agent: codex`.
+- Update the relevant documentation whenever project changes are made, then commit and push the documentation together with the change or in the next dedicated documentation commit.
 - Do not commit local `data/config.json`, `data/token.json`, logs, ZIPs, or built binaries.
 
 ## Rate Limiting
