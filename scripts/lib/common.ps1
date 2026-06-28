@@ -10,11 +10,6 @@ function Get-SpotifyExtensionRoot {
   return (Join-Path $RepoRoot "extensions\spotify-remote")
 }
 
-function Get-SpotifyMirrorRoot {
-  param([string]$RepoRoot = (Get-RepoRoot))
-  return (Join-Path $RepoRoot "extensions\spotifyremote")
-}
-
 function Resolve-GoExe {
   if ($env:GOEXE) {
     if (!(Test-Path $env:GOEXE)) {

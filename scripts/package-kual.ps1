@@ -9,7 +9,6 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Get-RepoRoot
 $extensionRoot = Get-SpotifyExtensionRoot -RepoRoot $repoRoot
-$mirrorRoot = Get-SpotifyMirrorRoot -RepoRoot $repoRoot
 
 if (!$SkipBuild) {
   $binary = Invoke-NativeBuild -RepoRoot $repoRoot -GoArm $GoArm
@@ -29,13 +28,10 @@ if (!(Test-Path $localBinary)) {
 
 $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("kindle-spotify-package-" + [guid]::NewGuid().ToString("N"))
 $tempExtension = Join-Path $tempRoot "extensions\spotify-remote"
-$tempMirror = Join-Path $tempRoot "extensions\spotifyremote"
 
 try {
   New-Item -ItemType Directory -Force -Path $tempExtension | Out-Null
   Copy-Item -Recurse -Force -Path (Join-Path $extensionRoot "*") -Destination $tempExtension
-  New-Item -ItemType Directory -Force -Path $tempMirror | Out-Null
-  Copy-Item -Recurse -Force -Path (Join-Path $mirrorRoot "*") -Destination $tempMirror
 
   foreach ($runtimeFile in @("config.json", "token.json", "oauth.json", "callback.txt", "login_url.txt", "status.txt")) {
     $path = Join-Path $tempExtension "data\$runtimeFile"

@@ -338,7 +338,6 @@ Recommended checks:
 ```powershell
 git status --short
 python -m json.tool extensions\spotify-remote\menu.json > $null
-python -m json.tool extensions\spotifyremote\menu.json > $null
 cd extensions\spotify-remote
 .\build.ps1
 $env:GO111MODULE='off'; go test ./src/native

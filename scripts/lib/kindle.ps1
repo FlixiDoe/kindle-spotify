@@ -26,6 +26,28 @@ function Find-KindleDrive {
   return "$($candidates[0].DeviceID)\"
 }
 
+function Remove-ObsoleteSpotifyMenuEntries {
+  param([string]$KindleRoot)
+
+  $kindleFetchMenu = Join-Path $KindleRoot "extensions\kindlefetch\menu.json"
+  if (!(Test-Path $kindleFetchMenu)) {
+    return
+  }
+
+  $menu = Get-Content -Raw -LiteralPath $kindleFetchMenu | ConvertFrom-Json
+  if (!$menu.items) {
+    return
+  }
+
+  $filteredItems = @($menu.items | Where-Object { $_.name -ne "Spotify Remote" })
+  if ($filteredItems.Count -eq $menu.items.Count) {
+    return
+  }
+
+  $menu.items = $filteredItems
+  $menu | ConvertTo-Json -Depth 16 | Set-Content -LiteralPath $kindleFetchMenu -Encoding UTF8
+}
+
 function Copy-SpotifyExtensionToKindle {
   param(
     [string]$KindleRoot,
@@ -34,7 +56,6 @@ function Copy-SpotifyExtensionToKindle {
   )
 
   $extensionRoot = Get-SpotifyExtensionRoot -RepoRoot $RepoRoot
-  $mirrorRoot = Get-SpotifyMirrorRoot -RepoRoot $RepoRoot
   $targetRoot = Join-Path $KindleRoot "extensions\spotify-remote"
   $targetMirrorRoot = Join-Path $KindleRoot "extensions\spotifyremote"
 
@@ -82,6 +103,11 @@ function Copy-SpotifyExtensionToKindle {
     }
   }
 
+  if (Test-Path $targetMirrorRoot) {
+    Remove-Item -Recurse -Force -LiteralPath $targetMirrorRoot
+  }
+  Remove-ObsoleteSpotifyMenuEntries -KindleRoot $KindleRoot
+
   foreach ($dir in @("src")) {
     $sourceDir = Join-Path $extensionRoot $dir
     $targetDir = Join-Path $targetRoot $dir
@@ -94,10 +120,6 @@ function Copy-SpotifyExtensionToKindle {
   Copy-RequiredFile `
     -Source (Join-Path $extensionRoot "data\config.example.json") `
     -Destination (Join-Path $targetRoot "data\config.example.json")
-
-  New-Item -ItemType Directory -Force -Path $targetMirrorRoot | Out-Null
-  Copy-RequiredFile -Source (Join-Path $mirrorRoot "menu.json") -Destination (Join-Path $targetMirrorRoot "menu.json")
-  Copy-RequiredFile -Source (Join-Path $mirrorRoot "config.xml") -Destination (Join-Path $targetMirrorRoot "config.xml")
 
   $localHash = Get-FileHash $localBinary -Algorithm SHA256
   $remoteHash = Get-FileHash $targetBinary -Algorithm SHA256

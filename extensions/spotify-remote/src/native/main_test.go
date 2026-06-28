@@ -223,7 +223,6 @@ func TestKUALLoginMenuUsesWrapper(t *testing.T) {
 	}
 	for _, path := range []string{
 		filepath.Join("..", "..", "menu.json"),
-		filepath.Join("..", "..", "..", "spotifyremote", "menu.json"),
 	} {
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -259,6 +258,9 @@ func TestKUALLoginMenuUsesWrapper(t *testing.T) {
 			}
 		}
 	}
+	if _, err := os.Stat(filepath.Join("..", "..", "..", "spotifyremote", "menu.json")); !os.IsNotExist(err) {
+		t.Fatalf("obsolete spotifyremote menu still exists: %v", err)
+	}
 }
 
 // TestDeployCopiesKUALWrapper verifies USB deploy ships run-kual.sh with the KUAL extension files.
@@ -267,7 +269,17 @@ func TestDeployCopiesKUALWrapper(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), `"run-kual.sh"`) {
+	script := string(raw)
+	if !strings.Contains(script, `"run-kual.sh"`) {
 		t.Fatal("deploy script does not copy run-kual.sh")
+	}
+	for _, want := range []string{
+		`extensions\spotifyremote`,
+		`Remove-ObsoleteSpotifyMenuEntries`,
+		`extensions\kindlefetch\menu.json`,
+	} {
+		if !strings.Contains(script, want) {
+			t.Fatalf("deploy script missing cleanup marker %q", want)
+		}
 	}
 }

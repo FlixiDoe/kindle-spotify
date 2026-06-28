@@ -41,8 +41,9 @@ The obsolete non-native runtime was removed. The maintained runtime surface is n
 ## Kindle Runtime Rules
 
 - Target install path is `/mnt/us/extensions/spotify-remote`.
-- Keep `extensions/spotify-remote/menu.json` and `extensions/spotifyremote/menu.json` synchronized while both folders exist.
-- Keep both `config.xml` files synchronized except for folder-specific IDs.
+- Do not ship mirror Spotify extension folders; only `extensions/spotify-remote` should register KUAL menu entries.
+- Deploy must remove stale embedded `Spotify Remote` groups from other KUAL menus, including `extensions/kindlefetch/menu.json`, so the Kindle only shows the current buttons once.
+- Keep only the canonical `extensions/spotify-remote/config.xml` registered with KUAL.
 - Prefer `start framework` / `stop framework` on PW5/newer firmware; fall back to `/etc/init.d/framework` only when present.
 - Always restore `preventScreenSaver` and the Kindle framework on exit or recovery.
 - Keep logs short. Move only useful reviewed failures into `docs/crash-logs/`.
@@ -126,7 +127,7 @@ Deploy rules:
 - Build locally before copying unless `-SkipBuild` is explicitly used.
 - Copy the new binary to `bin/spotify-remote-arm.new`; `run-native.sh` and `run-kual.sh` chmod and prefer that file on the next launch/action.
 - Preserve Kindle-local `data/config.json`, `data/token.json`, callback files, and logs.
-- Keep `extensions/spotify-remote/menu.json` and `extensions/spotifyremote/menu.json` synchronized on the Kindle.
+- Remove obsolete `extensions/spotifyremote` folders and stale `Spotify Remote` groups from other KUAL menus during deploy so KUAL does not show duplicate Spotify buttons.
 - Verify SHA256 of local binary and deployed binary.
 - Eject the Kindle before launching KUAL.
 
