@@ -310,6 +310,40 @@ func (f playbackTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	return f(r)
 }
 
+func TestFBInkPollCannotReplaceRateLimitedNextCommand(t *testing.T) {
+	resetRateLimitStateForTest()
+	nextRetried := make(chan struct{}, 1)
+	var polls, commands int
+	client := &http.Client{Transport: playbackTransport(func(r *http.Request) (*http.Response, error) {
+		status, body := http.StatusTooManyRequests, ""
+		switch r.URL.Path {
+		case "/v1/me/player":
+			polls++
+			if polls == 1 {
+				status, body = http.StatusOK, `{"is_playing":true}`
+			}
+		case "/v1/me/player/next":
+			commands++
+			if commands == 2 {
+				status = http.StatusNoContent
+				nextRetried <- struct{}{}
+			}
+		}
+		return &http.Response{StatusCode: status, Header: http.Header{"Retry-After": {"1"}},
+			Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	a := newNativeSpotifyAPITestApp(t, client)
+	a.drawFBInkNowPlaying()
+	a.uiControl("next")
+	a.drawFBInkNowPlaying()
+
+	select {
+	case <-nextRetried:
+	case <-time.After(2 * time.Second):
+		t.Fatal("display refresh displaced the next-track retry")
+	}
+}
+
 func TestFBInkPollTracksActivePlaybackForRateLimitRetries(t *testing.T) {
 	var status int
 	var body string
