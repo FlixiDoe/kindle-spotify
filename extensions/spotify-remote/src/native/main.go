@@ -314,6 +314,12 @@ func (a *app) uiControl(action string) {
 func (a *app) drawFBInkNowPlaying() {
 	var p playback
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
+	if err == nil {
+		a.mu.Lock()
+		a.state = p
+		a.hasState = code != http.StatusNoContent
+		a.mu.Unlock()
+	}
 	title := "Spotify Remote"
 	artist := "No active Spotify device"
 	albumName := "Start Spotify on phone or PC"
