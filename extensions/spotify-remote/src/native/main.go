@@ -2145,7 +2145,7 @@ func scheduleRetry(fn func() error, retryAfter time.Duration) {
 // Parameters are interpreted according to the signature; HTTP handlers receive response/request objects, while control helpers receive action, endpoint, coordinate, or formatting values.
 // Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
 // Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
-func (a *app) spotifyForm(endpoint string, form url.Values, bearer string, out any) error {
+func (a *app) spotifyForm(endpoint string, form url.Values, bearer string, out *tokenFile) error {
 	req, err := http.NewRequest(http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
 		return err
@@ -2164,7 +2164,13 @@ func (a *app) spotifyForm(endpoint string, form url.Values, bearer string, out a
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return spotifyError(resp.StatusCode, body)
 	}
-	return json.Unmarshal(body, out)
+	if err := json.Unmarshal(body, out); err != nil {
+		return err
+	}
+	if strings.TrimSpace(out.AccessToken) == "" || out.ExpiresIn <= 0 {
+		return errors.New("Incomplete Spotify token response")
+	}
+	return nil
 }
 
 // spotifyError converts Spotify HTTP error responses into user-facing errors.

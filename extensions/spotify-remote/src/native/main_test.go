@@ -43,6 +43,41 @@ func newNativeSpotifyAPITestApp(t *testing.T, client *http.Client) *app {
 	}
 }
 
+func TestIncompleteRefreshPreservesSavedTokenForNextAttempt(t *testing.T) {
+	for _, response := range []string{`{}`, `{"access_token":"new-access"}`} {
+		t.Run(response, func(t *testing.T) {
+			responses := make(chan string, 2)
+			responses <- response
+			responses <- `{"access_token":"new","expires_in":3600}`
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = w.Write([]byte(<-responses))
+			}))
+			defer srv.Close()
+			oldEndpoint := spotifyTokenEndpoint
+			spotifyTokenEndpoint = srv.URL
+			defer func() { spotifyTokenEndpoint = oldEndpoint }()
+			a := newNativeSpotifyAPITestApp(t, srv.Client())
+			path := filepath.Join(a.base, "data", "token.json")
+			want := tokenFile{AccessToken: "previous", RefreshToken: "refresh", ExpiresAt: 1}
+			if err := writeJSON(path, &want); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := a.loadToken(); err == nil {
+				t.Error("accepted an incomplete token response")
+			}
+			var saved tokenFile
+			if err := readJSON(path, &saved); err != nil || saved != want {
+				t.Fatal("incomplete refresh replaced the saved credentials")
+			}
+			token, err := a.loadToken()
+			if err != nil || token.AccessToken != "new" || token.RefreshToken != want.RefreshToken {
+				t.Fatal("could not recover on the next valid refresh")
+			}
+		})
+	}
+}
+
 func TestLoadTokenInvalidGrantClearsToken(t *testing.T) {
 	var hits int
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
