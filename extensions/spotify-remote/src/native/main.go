@@ -312,8 +312,21 @@ func (a *app) uiControl(action string) {
 // Return values follow the signature: errors report caller-visible failure conditions, strings and structs carry computed display, token, or response data, and void functions communicate by side effect.
 // Side effects can include Spotify HTTP calls, data/*.json reads or writes, Kindle display updates, log writes, browser launches, goroutine/channel activity, or app state mutation.
 func (a *app) drawFBInkNowPlaying() {
+	rateLimitMu.Lock()
+	waiting := rateLimitActive && time.Now().Before(rateLimitRetryAt)
+	rateLimitMu.Unlock()
+	if waiting {
+		// Keep the countdown and any queued control until Spotify's retry window opens.
+		return
+	}
 	var p playback
 	code, err := a.spotifyAPI(http.MethodGet, "https://api.spotify.com/v1/me/player", nil, &p)
+	if err == nil {
+		a.mu.Lock()
+		a.state = p
+		a.hasState = code != http.StatusNoContent
+		a.mu.Unlock()
+	}
 	title := "Spotify Remote"
 	artist := "No active Spotify device"
 	albumName := "Start Spotify on phone or PC"

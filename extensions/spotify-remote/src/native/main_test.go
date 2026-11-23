@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -300,5 +301,74 @@ func TestDeploySupportsKUALMenu(t *testing.T) {
 	}
 	if !strings.Contains(string(deployRaw), "-DeployActiveBinary:$DeployActiveBinary") {
 		t.Fatal("deploy-kindle.ps1 does not preserve default .new deploy behavior")
+	}
+}
+
+type playbackTransport func(*http.Request) (*http.Response, error)
+
+func (f playbackTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return f(r)
+}
+
+func TestFBInkPollCannotReplaceRateLimitedNextCommand(t *testing.T) {
+	resetRateLimitStateForTest()
+	nextRetried := make(chan struct{}, 1)
+	var polls, commands int
+	client := &http.Client{Transport: playbackTransport(func(r *http.Request) (*http.Response, error) {
+		status, body := http.StatusTooManyRequests, ""
+		switch r.URL.Path {
+		case "/v1/me/player":
+			polls++
+			if polls == 1 {
+				status, body = http.StatusOK, `{"is_playing":true}`
+			}
+		case "/v1/me/player/next":
+			commands++
+			if commands == 2 {
+				status = http.StatusNoContent
+				nextRetried <- struct{}{}
+			}
+		}
+		return &http.Response{StatusCode: status, Header: http.Header{"Retry-After": {"1"}},
+			Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	a := newNativeSpotifyAPITestApp(t, client)
+	a.drawFBInkNowPlaying()
+	a.uiControl("next")
+	a.drawFBInkNowPlaying()
+
+	select {
+	case <-nextRetried:
+	case <-time.After(2 * time.Second):
+		t.Fatal("display refresh displaced the next-track retry")
+	}
+}
+
+func TestFBInkPollTracksActivePlaybackForRateLimitRetries(t *testing.T) {
+	var status int
+	var body string
+	client := &http.Client{Transport: playbackTransport(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/v1/me/player" {
+			t.Fatalf("unexpected playback request: %s", r.URL.Path)
+		}
+		return &http.Response{StatusCode: status, Body: io.NopCloser(strings.NewReader(body))}, nil
+	})}
+	a := newNativeSpotifyAPITestApp(t, client)
+	for _, step := range []struct {
+		status int
+		body   string
+		want   bool
+	}{
+		{200, `{"is_playing":true}`, true},
+		{503, "", true},
+		{200, `{"is_playing":false}`, false},
+		{200, `{"is_playing":true}`, true},
+		{204, "", false},
+	} {
+		status, body = step.status, step.body
+		a.drawFBInkNowPlaying()
+		if got := a.isActivePlayback(); got != step.want {
+			t.Fatalf("after playback status %d and body %q, active = %v, want %v", status, body, got, step.want)
+		}
 	}
 }
