@@ -1897,7 +1897,7 @@ func (a *app) spotifyAPIWithRetry(method, endpoint string, body io.Reader, out a
 		}
 		return resp.StatusCode, errRateLimited
 	}
-	b, _ := io.ReadAll(resp.Body)
+	b, readErr := io.ReadAll(resp.Body)
 	if resp.StatusCode == http.StatusNoContent {
 		a.restoreRateLimitStatus()
 		clearRateLimit()
@@ -1906,7 +1906,14 @@ func (a *app) spotifyAPIWithRetry(method, endpoint string, body io.Reader, out a
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return resp.StatusCode, spotifyError(resp.StatusCode, b)
 	}
-	if out != nil && len(b) > 0 {
+	if out != nil {
+		if readErr != nil {
+			return resp.StatusCode, fmt.Errorf("incomplete Spotify response: %w", readErr)
+		}
+		b = bytes.TrimSpace(b)
+		if len(b) == 0 || bytes.Equal(b, []byte("null")) {
+			return resp.StatusCode, errors.New("Spotify returned no response data")
+		}
 		if err := json.Unmarshal(b, out); err != nil {
 			return resp.StatusCode, err
 		}

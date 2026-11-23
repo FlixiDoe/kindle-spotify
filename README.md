@@ -272,6 +272,8 @@ The lower information area also shows the active Spotify device name, so it is v
 
 Start playback in Spotify on a phone, desktop, or speaker first, then refresh the Kindle remote.
 
+If a volume or play/pause action reports an incomplete or empty Spotify response, run Status again. The remote needs a complete playback response to calculate the next setting. A failed read leaves the device untouched.
+
 `Premium required`
 
 Spotify playback-control endpoints generally require Spotify Premium.
