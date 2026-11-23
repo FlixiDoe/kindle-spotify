@@ -152,7 +152,7 @@ Linux/macOS:
 
 ```sh
 cd extensions/spotify-remote
-./build.sh
+sh build.sh
 ```
 
 The build creates:
@@ -180,7 +180,24 @@ From the repository root on Windows:
 .\scripts\test.ps1
 ```
 
-This validates the KUAL menu JSON files and runs the Go tests with the Kindle ARM build environment.
+This validates the KUAL menu JSON and runs the Go tests for the host platform.
+
+On Linux or macOS, run the host tests and cross-compile separately. Start in the repository root with Go on your `PATH`.
+
+```sh
+cd extensions/spotify-remote
+go test -count=1 ./...
+go vet ./...
+sh build.sh
+```
+
+The tests use loopback HTTP and temporary token files. The final command writes the Linux ARM executable to `bin/spotify-remote-arm`. Display rendering, touch input, and framework recovery need a physical Kindle; the [installation instructions](#install-on-kindle) cover that step.
+
+### Playback and session changes under review
+
+Two independent drafts target `main`. [PR #3](https://github.com/FlixiDoe/kindle-spotify/pull/3) records playback state from the native display and pauses its polling while a rate-limited control awaits retry. [PR #4](https://github.com/FlixiDoe/kindle-spotify/pull/4) preserves saved credentials when the token endpoint returns an incomplete success response. On either PR branch, the host test command above runs that branch’s regression tests.
+
+Both drafts were also tested together with a synthetic token refresh, process restart, next-track rate limit, retry and second restart. The image optimization in [PR #1](https://github.com/FlixiDoe/kindle-spotify/pull/1) is independent of these behaviors.
 
 ## Package
 
